@@ -218,3 +218,23 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# data and outputs stay out of git
+data/raw/*
+data/processed/*
+data/test_locked/*
+data/external/*
+outputs/*
+*.pt
+*.pth
+*.safetensors
+
+# keep the folders themselves
+!data/raw/.gitkeep
+!data/labels/.gitkeep
