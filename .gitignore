@@ -225,16 +225,12 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 
-# data and outputs stay out of git
-data/raw/*
-data/processed/*
-data/test_locked/*
-data/external/*
-outputs/*
-*.pt
-*.pth
-*.safetensors
+# runtime data: uploads, SQLite db, API response cache
+backend/data/
 
-# keep the folders themselves
-!data/raw/.gitkeep
-!data/labels/.gitkeep
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+# Claude md context
+CLAUDE.md

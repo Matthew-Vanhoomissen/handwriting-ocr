@@ -1,14 +1,7 @@
+openai
+python-dotenv
+flask
 opencv-python
 numpy
 pillow
-matplotlib
-pandas
-transformers
-datasets
-jiwer
-albumentations
-scikit-image
-jupyter
-ipykernel
 pytest
-tqdm
