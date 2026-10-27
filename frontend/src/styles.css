@@ -1,0 +1,66 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #f5f5f5;
+  color: #222;
+}
+
+.page { max-width: 1400px; margin: 0 auto; padding: 16px; }
+
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 1.4rem; margin: 0; }
+h2 { font-size: 1rem; margin: 0 0 8px; }
+
+.mock-badge {
+  background: #fff3cd; border: 1px solid #e0c060; color: #6b5200;
+  padding: 2px 8px; border-radius: 4px; font-size: 0.8rem;
+}
+
+.upload {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  margin: 16px 0; padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 6px;
+}
+
+.empty, .placeholder { color: #777; font-style: italic; }
+.hint { color: #777; font-size: 0.85rem; }
+
+.banner { padding: 8px 12px; border-radius: 4px; margin: 8px 0; }
+.banner.error { background: #fde8e8; border: 1px solid #e5a0a0; color: #8a1f1f; }
+.banner.warn { background: #fff3cd; border: 1px solid #e0c060; color: #6b5200; font-family: monospace; }
+
+.status-row { margin-bottom: 8px; }
+.status { font-weight: bold; padding: 1px 8px; border-radius: 4px; }
+.status-queued { background: #e2e3e5; }
+.status-processing { background: #cfe2ff; }
+.status-ready { background: #d1e7dd; }
+.status-error { background: #f8d7da; }
+
+/* Photo left, code right; stacks on narrow screens. */
+.review { display: grid; grid-template-columns: minmax(280px, 1fr) 2fr; gap: 12px; }
+.code-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-width: 0; }
+
+@media (max-width: 1000px) {
+  .review, .code-panels { grid-template-columns: 1fr; }
+}
+
+.panel { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; min-width: 0; }
+.image-panel img { width: 100%; height: auto; border: 1px solid #ccc; display: block; }
+
+.code {
+  margin: 0; padding: 8px 0; background: #fafafa; border: 1px solid #ddd;
+  font-family: Consolas, Menlo, monospace; font-size: 0.9rem; line-height: 1.5;
+  overflow-x: auto;
+}
+.code .line { display: flex; white-space: pre; }
+.code .gutter {
+  flex: none; width: 3em; padding-right: 0.75em; margin-right: 0.75em; text-align: right;
+  color: #999; user-select: none; border-right: 1px solid #ddd;
+}
+.code .line.uncertain { background: #fff3a8; }
+.code .line.uncertain .gutter { color: #8a6d00; font-weight: bold; }
+
+.raw { margin-top: 16px; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 8px 12px; }
+.raw summary { cursor: pointer; }
+.raw pre { overflow-x: auto; font-size: 0.85rem; }
