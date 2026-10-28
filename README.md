@@ -52,9 +52,14 @@ Runtime data (SQLite db, uploaded photos, API response cache) lives in
 | POST | `/api/submissions/<id>/grade` | `{final_score, notes?}` |
 | GET | `/api/assignments/<id>/export.csv` | |
 
-## Sandbox caveat
+## Sandbox
 
-Docker isn't set up yet, so student code runs in a restricted `subprocess`:
-timeout, temp working directory, isolated interpreter, capped output. On
-Windows it does **not** block network access or limit memory. Only run your
-own or anonymized samples until the Docker sandbox exists.
+Student code runs in a fresh Docker container per test case
+(`python:3.12-slim`): no network, 256 MB memory, 1 CPU, 64 processes,
+read-only filesystem, no capabilities, unprivileged user, 5 s time limit.
+Docker Desktop must be running; if it isn't, submissions go to `error`
+instead of running on the host.
+
+`SANDBOX=subprocess` switches to a host subprocess runner for quick local
+checks. It has a timeout but no network or memory isolation, so use it only
+with your own samples.

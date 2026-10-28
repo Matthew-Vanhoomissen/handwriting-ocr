@@ -43,6 +43,34 @@ def test_runs_in_temp_dir_not_repo():
     assert "backend" not in result["stdout"]
 
 
+def test_network_is_blocked():
+    code = ("import socket\n"
+            "try:\n"
+            "    socket.create_connection(('1.1.1.1', 53), timeout=2)\n"
+            "    print('open')\n"
+            "except OSError:\n"
+            "    print('blocked')")
+    assert run_code(code)["stdout"].strip() == "blocked"
+
+
+def test_memory_limit():
+    result = run_code("x = bytearray(1024 * 1024 * 1024)\nprint('ok')")
+    assert "ok" not in result["stdout"]
+    assert result["exit_code"] != 0
+    assert not result["timed_out"]
+
+
+def test_filesystem_is_read_only():
+    result = run_code("open('evil.txt', 'w').write('x')")
+    assert result["exit_code"] != 0
+    assert "Read-only file system" in result["stderr"]
+
+
+def test_runs_as_unprivileged_user():
+    result = run_code("import os\nprint(os.getuid())")
+    assert result["stdout"].strip() == "65534"
+
+
 def test_outputs_match_ignores_trailing_whitespace():
     assert outputs_match("1\n2  \n\n", "1\n2")
     assert outputs_match("1\r\n2\r\n", "1\n2\n")
