@@ -61,6 +61,31 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
 .code .line.uncertain { background: #fff3a8; }
 .code .line.uncertain .gutter { color: #8a6d00; font-weight: bold; }
 
+/* Assignment + test cases, above the upload box. Same panels as the review row. */
+.setup { display: grid; grid-template-columns: minmax(280px, 1fr) 2fr; gap: 12px; margin-top: 16px; }
+@media (max-width: 1000px) {
+  .setup { grid-template-columns: 1fr; }
+}
+
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.stack { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.stack label, .add-test label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+.stack label.inline { flex-direction: row; align-items: center; }
+input:not([type=checkbox]):not([type=file]), textarea, select { font: inherit; padding: 4px 6px; }
+textarea { font-family: Consolas, Menlo, monospace; font-size: 0.9rem; resize: vertical; }
+
+.assignment-info { margin-top: 12px; font-size: 0.9rem; }
+.assignment-info .prompt { white-space: pre-wrap; margin: 8px 0 0; }
+
+.tests { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.tests th, .tests td { border-bottom: 1px solid #ddd; padding: 6px; text-align: left; vertical-align: top; }
+.tests pre { margin: 0; font-family: Consolas, Menlo, monospace; white-space: pre-wrap; }
+
+.add-test { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
+@media (max-width: 700px) {
+  .add-test { grid-template-columns: 1fr; }
+}
+
 .raw { margin-top: 16px; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 8px 12px; }
 .raw summary { cursor: pointer; }
 .raw pre { overflow-x: auto; font-size: 0.85rem; }

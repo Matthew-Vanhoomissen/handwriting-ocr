@@ -5,7 +5,12 @@ export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 // Returns { status, body } so the UI can show exactly what came back.
 async function request(method, url, body) {
-  const res = await fetch(url, { method, body })
+  const isJson = body !== undefined && !(body instanceof FormData)
+  const res = await fetch(url, {
+    method,
+    headers: isJson ? { 'Content-Type': 'application/json' } : undefined,
+    body: isJson ? JSON.stringify(body) : body,
+  })
   const text = await res.text()
   let parsed
   try {
@@ -14,7 +19,10 @@ async function request(method, url, body) {
     parsed = text
   }
   if (!res.ok) {
-    const detail = typeof parsed === 'object' && parsed?.error ? parsed.error : text
+    // 400s carry { error }; 404s are Flask's HTML page, which is too long to show.
+    let detail = ''
+    if (parsed && typeof parsed === 'object' && parsed.error) detail = parsed.error
+    else if (typeof parsed === 'string' && parsed.length < 200) detail = parsed
     const err = new Error(`${method} ${url} failed: HTTP ${res.status}${detail ? ` - ${detail}` : ''}`)
     err.body = parsed
     throw err
@@ -23,13 +31,31 @@ async function request(method, url, body) {
 }
 
 const real = {
-  createSubmission(file) {
+  listAssignments() {
+    return request('GET', '/api/assignments')
+  },
+  getAssignment(id) {
+    return request('GET', `/api/assignments/${id}`)
+  },
+  createAssignment(fields) {
+    return request('POST', '/api/assignments', fields)
+  },
+  addTestCase(assignmentId, fields) {
+    return request('POST', `/api/assignments/${assignmentId}/tests`, fields)
+  },
+  deleteTestCase(id) {
+    return request('DELETE', `/api/tests/${id}`)
+  },
+  createSubmission(assignmentId, file) {
     const form = new FormData()
-    form.append('image', file)
-    return request('POST', '/api/submissions', form)
+    form.append('files', file)
+    return request('POST', `/api/assignments/${assignmentId}/submissions`, form)
   },
   getSubmission(id) {
     return request('GET', `/api/submissions/${id}`)
+  },
+  imageUrl(id) {
+    return `/api/submissions/${id}/image`
   },
 }
 
