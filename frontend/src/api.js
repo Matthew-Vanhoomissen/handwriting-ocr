@@ -1,7 +1,7 @@
 // Single switch between the mock and the real backend. See .env.development.
 import * as mock from './mockApi.js'
 
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
+export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'false'
 
 // Returns { status, body } so the UI can show exactly what came back.
 async function request(method, url, body) {
