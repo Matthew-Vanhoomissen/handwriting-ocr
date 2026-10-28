@@ -29,7 +29,8 @@ Allowed (handwriting):
   6 vs b, 2 vs z). A slashed zero is 0.
 - Letter case in names: if the same name appears with letters whose case is
   unclear (s vs S, total vs Total, myVar vs myvar), the student meant one
-  name. Use the spelling from where it is first assigned, everywhere.
+  name. Use the spelling from where it is first assigned, everywhere. If a
+  variable name starts with a capital, always convert to lowercase.
 - Indentation: handwritten indentation drifts. Use 4 spaces per level and
   give each line the level its position and the surrounding structure
   indicate (for example, lines under an if belong to that block).
