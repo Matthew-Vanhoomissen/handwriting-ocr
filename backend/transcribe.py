@@ -1,6 +1,7 @@
-"""Faithful transcription of a handwritten program with Muse Spark.
+"""Transcription of a handwritten program with Muse Spark.
 
-Returns code and uncertain_lines.
+Handwriting ambiguity is resolved charitably; programming mistakes are kept.
+Returns code, uncertain_lines, and static_flags.
 """
 
 import ast
@@ -11,32 +12,46 @@ from backend.llm import DEFAULT_MODEL, ask_with_image
 
 TRANSCRIBE_PROMPT = """\
 This photo shows a handwritten Python program written by a student.
-Transcribe it exactly as written, character for character. The transcription
-will be run against test cases to grade the student, so a misread character
-can cost the student points they earned.
+Transcribe it into the program the student meant to write, reading the
+handwriting the way a professor grading on paper would. The result will be
+run against test cases, so the student is graded on their code, not on their
+penmanship.
 
-Faithfulness:
-- Do NOT fix mistakes. Keep typos, misspelled or inconsistent variable names,
-  missing colons or parentheses, and logic bugs exactly as written.
-- Do not add code, comments, or imports that are not on the page.
+Resolve handwriting, not programming:
+- Handwriting issues should be read charitably. Programming mistakes must be
+  kept exactly as written, because those are what is being graded.
+- Ask of each choice: "Is this about how the student formed a character, or
+  about what code the student wrote?" Only the first may be resolved.
+
+Allowed (handwriting):
+- Ambiguous characters: pick the reading that fits the context. A character
+  in a number is a digit, a character in a name is a letter (0 vs O, 1 vs l,
+  6 vs b, 2 vs z). A slashed zero is 0.
+- Letter case in names: if the same name appears with letters whose case is
+  unclear (s vs S, total vs Total, myVar vs myvar), the student meant one
+  name. Use the spelling from where it is first assigned, everywhere.
+- Indentation: handwritten indentation drifts. Use 4 spaces per level and
+  give each line the level its position and the surrounding structure
+  indicate (for example, lines under an if belong to that block).
+- Spacing inside a line, letter size, and messy strokes do not matter.
 - Ignore crossed-out text.
 
-Python is case-sensitive, and handwriting makes some characters ambiguous.
-Look closely at these pairs: s/S, c/C, o/O/0, x/X, z/Z/2, l/1/I/|, b/6, g/9,
-u/v, colon/semicolon, single/double quotes, comma/period. A slashed zero means
-0. Compare a letter's size to the same letter elsewhere on the page.
+Not allowed (programming):
+- Do not add a missing colon, parenthesis, bracket, or quote.
+- Do not fix a misspelled name when the letters are clearly different
+  (count vs coutn), or a wrong function, operator, or number that is
+  clearly written.
+- Do not change logic, add imports, or add code that is not on the page.
+- If a line is clearly placed at the wrong indentation level (not drift, but
+  an obvious outdent or indent), keep it where the student put it.
+- In string literals, keep the text as written. Use normal handwriting
+  judgment for letter case, but do not correct spelling.
 
-Indentation:
-- Use 4 spaces per level. Handwritten indentation drifts, so decide each
-  line's level from its horizontal position relative to the lines above it.
-
-Uncertainty:
-- For every line where a character's identity or case is ambiguous, or the
-  indentation level is not clear from the page, add an entry to
-  uncertain_lines with the 1-based line number, what you chose, the
-  alternative reading, and why. Do not resolve ambiguity silently; flagging
-  a line costs nothing, while a silent wrong guess can mis-grade a student.
-- Use an empty list only if every line is unambiguous."""
+uncertain_lines: list only readings you could not settle with the rules
+above, where the other reading would change what the program does. For each,
+give the 1-based line number, the full line as you transcribed it (chosen),
+the full line under the other reading (alternative), and a short reason.
+Most programs should have none."""
 
 TRANSCRIPTION_SCHEMA = {
     "name": "transcription",
