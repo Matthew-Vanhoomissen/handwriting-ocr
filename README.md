@@ -23,3 +23,38 @@ python -m venv .venv
 pip install -r requirements.txt
 copy .env.example .env   # then set MODEL_API_KEY
 ```
+
+## Running
+
+```
+python -m backend.app          # API on http://127.0.0.1:5000 plus the worker
+python -m pytest tests         # sandbox and API tests (no model calls)
+python -m backend.transcribe samples/simple_python1.jpg   # one transcription
+python -m backend.pipeline <image> <assignment_id>        # one submission, CLI
+```
+
+Runtime data (SQLite db, uploaded photos, API response cache) lives in
+`backend/data/`, which is gitignored.
+
+## API
+
+| Method | Route | Body |
+|---|---|---|
+| POST | `/api/assignments` | `{title, max_points, prompt?, exact_match?}` |
+| GET | `/api/assignments`, `/api/assignments/<id>` | |
+| POST | `/api/assignments/<id>/tests` | `{input, expected_output}` |
+| DELETE | `/api/tests/<id>` | |
+| POST | `/api/assignments/<id>/submissions` | multipart `files`, optional `labels` |
+| GET | `/api/assignments/<id>/submissions` | |
+| GET | `/api/submissions/<id>`, `/api/submissions/<id>/image` | |
+| POST | `/api/submissions/<id>/rerun` | `{code}` |
+| POST | `/api/submissions/<id>/requeue` | |
+| POST | `/api/submissions/<id>/grade` | `{final_score, notes?}` |
+| GET | `/api/assignments/<id>/export.csv` | |
+
+## Sandbox caveat
+
+Docker isn't set up yet, so student code runs in a restricted `subprocess`:
+timeout, temp working directory, isolated interpreter, capped output. On
+Windows it does **not** block network access or limit memory. Only run your
+own or anonymized samples until the Docker sandbox exists.
