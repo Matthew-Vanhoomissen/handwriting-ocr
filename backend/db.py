@@ -137,8 +137,8 @@ def list_test_cases(assignment_id):
 def create_submission(assignment_id, student_label, image_path):
     with connect() as conn:
         cur = conn.execute(
-            "INSERT INTO submissions (assignment_id, student_label, image_path)"
-            " VALUES (?, ?, ?)", (assignment_id, student_label, image_path))
+            "INSERT INTO submissions"
+            " (assignment_id, student_label, image_path) VALUES (?, ?, ?)", (assignment_id, student_label, image_path))
         return cur.lastrowid
 
 
@@ -173,8 +173,8 @@ def claim_next_queued():
     """Atomically move the oldest queued submission to processing."""
     with connect() as conn:
         return _row(conn.execute(
-            "UPDATE submissions SET status = 'processing', error_message = NULL"
-            " WHERE id = (SELECT id FROM submissions WHERE status = 'queued'"
+            "UPDATE submissions"
+            " SET status = 'processing', error_message = NULL WHERE id = (SELECT id FROM submissions WHERE status = 'queued'"
             " ORDER BY id LIMIT 1) RETURNING id"))
 
 

@@ -96,10 +96,10 @@ def main():
     print(sub["transcription"])
     for r in db.list_test_results(submission_id):
         status = "PASS" if r["passed"] else "FAIL"
+        error = f" error={r['error'].splitlines()[-1]}" if r["error"] else ""
         print(f"  [{status}] input={r['input']!r}"
               f" expected={r['expected_output']!r}"
-              f" got={r['actual_output']!r}"
-              + (f" error={r['error'].splitlines()[-1]}" if r["error"] else ""))
+              f" got={r['actual_output']!r}{error}")
 
 
 if __name__ == "__main__":
