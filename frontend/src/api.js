@@ -49,9 +49,11 @@ const real = {
   deleteTestCase(id) {
     return request('DELETE', `/api/tests/${id}`)
   },
-  createSubmission(assignmentId, file) {
+  // `label` is optional; the backend falls back to the file name when it's missing.
+  createSubmission(assignmentId, file, label) {
     const form = new FormData()
     form.append('files', file)
+    if (label) form.append('labels', label)
     return request('POST', `/api/assignments/${assignmentId}/submissions`, form)
   },
   listSubmissions(assignmentId) {

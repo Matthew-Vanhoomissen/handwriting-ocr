@@ -34,6 +34,8 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
   margin: 16px 0; padding: 12px; background: #fff; border: 1px solid #ddd; border-radius: 6px;
 }
 
+.upload .label-input { width: 260px; max-width: 100%; }
+
 .empty, .placeholder { color: #777; font-style: italic; }
 .hint { color: #777; font-size: 0.85rem; }
 
@@ -83,6 +85,24 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
 @container (max-width: 1000px) {
   .setup { grid-template-columns: 1fr; }
 }
+
+/* Assignment tabs across the top. The tabs scroll sideways when there are many;
+   "+ New" stays pinned to their right. */
+.tabs-bar { display: flex; align-items: flex-end; gap: 4px; margin-top: 16px; padding: 0 2px; border-bottom: 1px solid #ddd; }
+.tabs { display: flex; align-items: flex-end; gap: 4px; min-width: 0; overflow-x: auto; }
+.tab {
+  flex: none; max-width: 220px; padding: 6px 14px; font: inherit; color: #444; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  background: #ebebeb; border: 1px solid #ddd; border-bottom: none; border-radius: 6px 6px 0 0;
+}
+.tab:hover { background: #e2e2e2; }
+.tab.active { background: #fff; color: #222; font-weight: bold; box-shadow: inset 0 -3px 0 #8fb3e8; }
+.tab-new { background: transparent; border-style: dashed; color: #555; }
+.tabs-loading { padding: 6px; }
+.tabs .banner { flex: 1; margin: 4px 0; }
+
+.assignment-title { font-size: 1.05rem; }
+.push-right { margin-left: auto; }
 
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .stack { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }

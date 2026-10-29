@@ -170,15 +170,15 @@ export async function deleteTestCase(id) {
   return { status: 204, body: null }
 }
 
-export async function createSubmission(assignmentId, file) {
+export async function createSubmission(assignmentId, file, label) {
   await delay(300)
   const url = `/api/assignments/${assignmentId}/submissions`
   assignmentOr404('POST', url, assignmentId)
   const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
   if (!ALLOWED_EXTENSIONS.includes(ext)) throw fail('POST', url, 400, `${file.name}: use jpg, png, or webp`)
   const id = nextSubmissionId++
-  const label = file.name.slice(0, file.name.lastIndexOf('.'))
-  submissions.set(id, { createdAt: Date.now(), scenario, assignmentId: Number(assignmentId), label })
+  const fileStem = file.name.slice(0, file.name.lastIndexOf('.'))
+  submissions.set(id, { createdAt: Date.now(), scenario, assignmentId: Number(assignmentId), label: label || fileStem })
   return { status: 201, body: { submission_ids: [id] } }
 }
 

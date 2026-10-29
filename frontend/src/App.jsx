@@ -3,6 +3,7 @@ import { api, USE_MOCK } from './api.js'
 import { SCENARIOS, setScenario } from './mockApi.js'
 import CodeBlock from './components/CodeBlock.jsx'
 import AssignmentSetup from './components/AssignmentSetup.jsx'
+import AssignmentTabs from './components/AssignmentTabs.jsx'
 import SubmissionList from './components/SubmissionList.jsx'
 import ConfirmDialog from './components/ConfirmDialog.jsx'
 
@@ -10,8 +11,12 @@ const POLL_MS = 1500
 const DONE = ['ready', 'graded', 'error']
 
 export default function App() {
+  const [assignments, setAssignments] = useState(null) // null while loading
+  const [assignmentsError, setAssignmentsError] = useState(null)
+  const [creatingAssignment, setCreatingAssignment] = useState(false)
   const [assignmentId, setAssignmentId] = useState(null)
   const [file, setFile] = useState(null)
+  const [label, setLabel] = useState('')
   const [uploading, setUploading] = useState(false)
   const [submissionId, setSubmissionId] = useState(null)
   const [submission, setSubmission] = useState(null)
@@ -31,8 +36,44 @@ export default function App() {
 
   function selectAssignment(id) {
     // Submissions belong to an assignment, so switching clears the current one.
+    setCreatingAssignment(false)
+    if (id === assignmentId) return
     clearSubmission()
     setAssignmentId(id)
+  }
+
+  // Load the tab list once; start on the newest assignment, or the create form if there are none.
+  useEffect(() => {
+    let cancelled = false
+    api
+      .listAssignments()
+      .then((res) => {
+        if (cancelled) return
+        setRaw({ label: `GET /api/assignments -> ${res.status}`, body: res.body })
+        setAssignments(res.body)
+        if (res.body.length === 0) setCreatingAssignment(true)
+        else setAssignmentId(res.body[res.body.length - 1].id)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setAssignmentsError(err.message)
+        setRaw({ label: 'GET /api/assignments (failed)', body: err.body ?? null })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function handleAssignmentCreated(row) {
+    setAssignments((prev) => [...(prev ?? []), row])
+    selectAssignment(row.id)
+  }
+
+  function handleAssignmentDeleted(id) {
+    const remaining = assignments.filter((a) => a.id !== id)
+    setAssignments(remaining)
+    selectAssignment(remaining.length ? remaining[remaining.length - 1].id : null)
+    if (remaining.length === 0) setCreatingAssignment(true)
   }
 
   function selectSubmission(id) {
@@ -49,8 +90,9 @@ export default function App() {
     const url = `/api/assignments/${assignmentId}/submissions`
     try {
       if (USE_MOCK) setScenario(mockScenario)
-      const res = await api.createSubmission(assignmentId, file)
+      const res = await api.createSubmission(assignmentId, file, label.trim())
       setRaw({ label: `POST ${url} -> ${res.status}`, body: res.body })
+      setLabel('')
       setSubmissionId(res.body.submission_ids[0])
       setListRefresh((n) => n + 1)
     } catch (err) {
@@ -113,11 +155,23 @@ export default function App() {
         {USE_MOCK && <span className="mock-badge">MOCK MODE - no backend calls</span>}
       </header>
 
+      <AssignmentTabs
+        assignments={assignments}
+        selectedId={assignmentId}
+        creating={creatingAssignment}
+        error={assignmentsError}
+        onSelect={selectAssignment}
+        onNew={() => setCreatingAssignment(true)}
+      />
+
       <div className={sidebarOpen ? 'layout' : 'layout sidebar-closed'}>
         <div className="main">
           <AssignmentSetup
             assignmentId={assignmentId}
-            onSelect={selectAssignment}
+            creating={creatingAssignment}
+            onCancelCreate={assignments?.length > 0 ? () => setCreatingAssignment(false) : null}
+            onCreated={handleAssignmentCreated}
+            onDeleted={handleAssignmentDeleted}
             onResponse={(label, body) => setRaw({ label, body })}
           />
 
@@ -139,6 +193,14 @@ export default function App() {
                 </select>
               </label>
             )}
+            <input
+              className="label-input"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder={file ? `Name (default: ${file.name.replace(/\.[^.]+$/, '')})` : 'Submission name (optional)'}
+              aria-label="Submission name"
+              title="Defaults to the file name. Use an anonymized label, not a student's real name."
+            />
             <button type="submit" disabled={!file || uploading || assignmentId == null}>
               {uploading ? 'Uploading...' : 'Upload'}
             </button>

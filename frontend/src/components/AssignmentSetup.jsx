@@ -2,12 +2,18 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 
-// Pick, create, or delete an assignment, and manage its test cases.
-// `onResponse(label, body)` feeds the Raw JSON panel in App.
-export default function AssignmentSetup({ assignmentId, onSelect, onResponse }) {
-  const [assignments, setAssignments] = useState(null) // null while loading
+// Details, create form, and delete for the assignment chosen in the tab bar,
+// plus its test cases. App owns the assignment list; this reports changes to
+// it through onCreated/onDeleted. `onResponse(label, body)` feeds Raw JSON.
+export default function AssignmentSetup({
+  assignmentId,
+  creating,
+  onCancelCreate,
+  onCreated,
+  onDeleted,
+  onResponse,
+}) {
   const [detail, setDetail] = useState(null) // assignment with test_cases
-  const [showCreate, setShowCreate] = useState(false)
   const [error, setError] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null) // { id, title, tests, submissions }
   const [deleting, setDeleting] = useState(false)
@@ -25,22 +31,10 @@ export default function AssignmentSetup({ assignmentId, onSelect, onResponse }) 
     }
   }
 
-  async function loadAssignments() {
-    const res = await call('GET /api/assignments', () => api.listAssignments())
-    if (!res) return
-    setAssignments(res.body)
-    if (res.body.length === 0) setShowCreate(true)
-    else if (assignmentId == null) onSelect(res.body[res.body.length - 1].id)
-  }
-
   async function loadDetail(id) {
     const res = await call(`GET /api/assignments/${id}`, () => api.getAssignment(id))
     if (res) setDetail(res.body)
   }
-
-  useEffect(() => {
-    loadAssignments()
-  }, [])
 
   useEffect(() => {
     setDetail(null)
@@ -50,9 +44,7 @@ export default function AssignmentSetup({ assignmentId, onSelect, onResponse }) 
   async function handleCreate(fields) {
     const res = await call('POST /api/assignments', () => api.createAssignment(fields))
     if (!res) return false
-    setAssignments((prev) => [...(prev ?? []), res.body])
-    setShowCreate(false)
-    onSelect(res.body.id)
+    onCreated(res.body)
     return true
   }
 
@@ -87,47 +79,27 @@ export default function AssignmentSetup({ assignmentId, onSelect, onResponse }) 
     const res = await call(`DELETE /api/assignments/${id}`, () => api.deleteAssignment(id))
     setDeleting(false)
     setPendingDelete(null)
-    if (!res) return
-    const remaining = assignments.filter((a) => a.id !== id)
-    setAssignments(remaining)
-    if (remaining.length === 0) setShowCreate(true)
-    onSelect(remaining.length ? remaining[remaining.length - 1].id : null)
+    if (res) onDeleted(id)
   }
 
   return (
     <div className="setup">
       <div className="panel">
-        <h2>Assignment</h2>
-        {assignments == null ? (
-          <p className="placeholder">Loading assignments...</p>
-        ) : (
-          <div className="row">
-            {assignments.length > 0 ? (
-              <select
-                value={assignmentId ?? ''}
-                onChange={(e) => onSelect(Number(e.target.value))}
-              >
-                {assignments.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    #{a.id} {a.title}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className="placeholder">No assignments yet.</span>
-            )}
-            {!showCreate && (
-              <button type="button" onClick={() => setShowCreate(true)}>
-                New assignment
-              </button>
-            )}
-            {detail && !showCreate && (
-              <button type="button" className="danger" onClick={askDeleteAssignment}>
+        <h2>{creating ? 'New assignment' : 'Assignment'}</h2>
+        {!creating &&
+          (assignmentId == null ? (
+            <p className="placeholder">No assignment selected. Pick a tab above or create one.</p>
+          ) : detail == null ? (
+            <p className="placeholder">Loading assignment...</p>
+          ) : (
+            <div className="row">
+              <strong className="assignment-title">{detail.title}</strong>
+              <span className="hint">#{detail.id}</span>
+              <button type="button" className="danger push-right" onClick={askDeleteAssignment}>
                 Delete assignment
               </button>
-            )}
-          </div>
-        )}
+            </div>
+          ))}
 
         <ConfirmDialog
           open={pendingDelete != null}
@@ -157,7 +129,7 @@ export default function AssignmentSetup({ assignmentId, onSelect, onResponse }) 
           onCancel={() => setPendingDelete(null)}
         />
 
-        {detail && !showCreate && (
+        {detail && !creating && (
           <div className="assignment-info">
             <div>
               Max points: <strong>{detail.max_points}</strong> | Output match:{' '}
@@ -167,12 +139,7 @@ export default function AssignmentSetup({ assignmentId, onSelect, onResponse }) 
           </div>
         )}
 
-        {showCreate && (
-          <CreateAssignmentForm
-            onSubmit={handleCreate}
-            onCancel={assignments?.length > 0 ? () => setShowCreate(false) : null}
-          />
-        )}
+        {creating && <CreateAssignmentForm onSubmit={handleCreate} onCancel={onCancelCreate} />}
 
         {error && <div className="banner error">{error}</div>}
       </div>
