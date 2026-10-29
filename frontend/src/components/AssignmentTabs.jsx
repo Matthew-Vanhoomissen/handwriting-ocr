@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { fmtPoints } from '../format.js'
 
 // Horizontal tab bar for switching assignments. The tabs scroll sideways when
 // there are more than fit (the active one is scrolled into view); "+ New" sits
@@ -27,7 +28,7 @@ export default function AssignmentTabs({ assignments, selectedId, creating, erro
                 ref={active ? activeRef : null}
                 className={active ? 'tab active' : 'tab'}
                 aria-current={active ? 'page' : undefined}
-                title={`#${a.id} ${a.title}`}
+                title={`#${a.id} ${a.title} (${a.question_count} question${a.question_count === 1 ? '' : 's'}, ${fmtPoints(a.total_points)} pts)`}
                 onClick={() => onSelect(a.id)}
               >
                 {a.title}

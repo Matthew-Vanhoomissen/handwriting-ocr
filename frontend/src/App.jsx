@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { api, USE_MOCK } from './api.js'
 import { SCENARIOS, setScenario } from './mockApi.js'
 import CodeBlock from './components/CodeBlock.jsx'
-import AssignmentSetup from './components/AssignmentSetup.jsx'
+import AssignmentPanel from './components/AssignmentPanel.jsx'
 import AssignmentTabs from './components/AssignmentTabs.jsx'
+import QuestionPanel from './components/QuestionPanel.jsx'
 import SubmissionList from './components/SubmissionList.jsx'
 import ConfirmDialog from './components/ConfirmDialog.jsx'
 import TestResults from './components/TestResults.jsx'
+import { questionLabel } from './format.js'
 
 const POLL_MS = 1500
 const DONE = ['ready', 'graded', 'error']
@@ -16,6 +18,11 @@ export default function App() {
   const [assignmentsError, setAssignmentsError] = useState(null)
   const [creatingAssignment, setCreatingAssignment] = useState(false)
   const [assignmentId, setAssignmentId] = useState(null)
+  const [detail, setDetail] = useState(null) // selected assignment with questions and their test cases
+  const [detailError, setDetailError] = useState(null)
+  const [detailVersion, setDetailVersion] = useState(0) // bump to re-fetch detail
+  const [questionId, setQuestionId] = useState(null)
+  const [creatingQuestion, setCreatingQuestion] = useState(false)
   const [file, setFile] = useState(null)
   const [label, setLabel] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -36,12 +43,23 @@ export default function App() {
   }
 
   function selectAssignment(id) {
-    // Submissions belong to an assignment, so switching clears the current one.
+    // Submissions belong to a question in this assignment, so switching clears the current one.
     setCreatingAssignment(false)
     if (id === assignmentId) return
     clearSubmission()
+    setCreatingQuestion(false)
+    setQuestionId(null)
     setAssignmentId(id)
   }
+
+  function selectQuestion(id) {
+    setCreatingQuestion(false)
+    if (id === questionId) return
+    clearSubmission()
+    setQuestionId(id)
+  }
+
+  const reloadDetail = () => setDetailVersion((v) => v + 1)
 
   // Load the tab list once; start on the newest assignment, or the create form if there are none.
   useEffect(() => {
@@ -77,6 +95,61 @@ export default function App() {
     if (remaining.length === 0) setCreatingAssignment(true)
   }
 
+  // Load the selected assignment's questions and test cases. Clearing only on
+  // an assignment switch (not on reloads) avoids flicker after edits.
+  useEffect(() => {
+    setDetail(null)
+    setDetailError(null)
+  }, [assignmentId])
+
+  useEffect(() => {
+    if (assignmentId == null) return
+    let cancelled = false
+    api
+      .getAssignment(assignmentId)
+      .then((res) => {
+        if (cancelled) return
+        setRaw({ label: `GET /api/assignments/${assignmentId} -> ${res.status}`, body: res.body })
+        setDetail(res.body)
+        setDetailError(null)
+        // Keep the tab list's computed totals in step with question edits.
+        const { id, question_count, total_points } = res.body
+        setAssignments((prev) => prev?.map((a) => (a.id === id ? { ...a, question_count, total_points } : a)))
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setDetailError(err.message)
+        setRaw({ label: `GET /api/assignments/${assignmentId} (failed)`, body: err.body ?? null })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [assignmentId, detailVersion])
+
+  // Default to the first question whenever the current one isn't in this assignment.
+  useEffect(() => {
+    if (!detail) return
+    if (!detail.questions.some((q) => q.id === questionId)) selectQuestion(detail.questions[0]?.id ?? null)
+  }, [detail])
+
+  function handleQuestionCreated(q) {
+    selectQuestion(q.id)
+    reloadDetail()
+  }
+
+  function handleQuestionDeleted(id) {
+    // Move to the next question, or the previous one if it was last.
+    const qs = detail.questions
+    const i = qs.findIndex((q) => q.id === id)
+    const neighbor = qs[i + 1] ?? qs[i - 1] ?? null
+    selectQuestion(neighbor?.id ?? null)
+    reloadDetail()
+  }
+
+  const question = detail?.questions.find((q) => q.id === questionId) ?? null
+  // Uploads go to the highlighted question; not while a create form is open.
+  const uploadTarget = !creatingAssignment && !creatingQuestion ? question : null
+
   function selectSubmission(id) {
     if (id === submissionId) return
     clearSubmission()
@@ -85,13 +158,13 @@ export default function App() {
 
   async function handleUpload(e) {
     e.preventDefault()
-    if (!file || assignmentId == null) return
+    if (!file || uploadTarget == null) return
     setUploading(true)
     clearSubmission()
-    const url = `/api/assignments/${assignmentId}/submissions`
+    const url = `/api/questions/${uploadTarget.id}/submissions`
     try {
       if (USE_MOCK) setScenario(mockScenario)
-      const res = await api.createSubmission(assignmentId, file, label.trim())
+      const res = await api.createSubmission(uploadTarget.id, file, label.trim())
       setRaw({ label: `POST ${url} -> ${res.status}`, body: res.body })
       setLabel('')
       setSubmissionId(res.body.submission_ids[0])
@@ -167,14 +240,33 @@ export default function App() {
 
       <div className={sidebarOpen ? 'layout' : 'layout sidebar-closed'}>
         <div className="main">
-          <AssignmentSetup
-            assignmentId={assignmentId}
-            creating={creatingAssignment}
-            onCancelCreate={assignments?.length > 0 ? () => setCreatingAssignment(false) : null}
-            onCreated={handleAssignmentCreated}
-            onDeleted={handleAssignmentDeleted}
-            onResponse={(label, body) => setRaw({ label, body })}
-          />
+          <div className="setup">
+            <AssignmentPanel
+              detail={detail}
+              assignmentId={assignmentId}
+              creating={creatingAssignment}
+              onCancelCreate={assignments?.length > 0 ? () => setCreatingAssignment(false) : null}
+              onCreated={handleAssignmentCreated}
+              onDeleted={handleAssignmentDeleted}
+              questionId={questionId}
+              creatingQuestion={creatingQuestion}
+              onSelectQuestion={selectQuestion}
+              onAddQuestion={() => setCreatingQuestion(true)}
+              loadError={detailError}
+              onResponse={(label, body) => setRaw({ label, body })}
+            />
+            <QuestionPanel
+              detail={creatingAssignment ? null : detail}
+              questionId={questionId}
+              creating={creatingQuestion}
+              creatingAssignment={creatingAssignment}
+              onCancelCreate={() => setCreatingQuestion(false)}
+              onCreated={handleQuestionCreated}
+              onDeleted={handleQuestionDeleted}
+              onChanged={reloadDetail}
+              onResponse={(label, body) => setRaw({ label, body })}
+            />
+          </div>
 
           <form className="upload" onSubmit={handleUpload}>
             <input
@@ -202,10 +294,14 @@ export default function App() {
               aria-label="Submission name"
               title="Defaults to the file name. Use an anonymized label, not a student's real name."
             />
-            <button type="submit" disabled={!file || uploading || assignmentId == null}>
+            <button type="submit" disabled={!file || uploading || uploadTarget == null}>
               {uploading ? 'Uploading...' : 'Upload'}
             </button>
-            {assignmentId == null && <span className="hint">Select an assignment before uploading.</span>}
+            <span className="hint">
+              {uploadTarget
+                ? `Uploads to ${detail.title} > ${questionLabel(uploadTarget)}`
+                : 'Select a question before uploading.'}
+            </span>
           </form>
 
           {requestError && <div className="banner error">Request failed: {requestError}</div>}
@@ -253,7 +349,8 @@ export default function App() {
         </div>
 
         <SubmissionList
-          assignmentId={assignmentId}
+          questionId={questionId}
+          questionName={question ? questionLabel(question) : null}
           selectedId={submissionId}
           onSelect={selectSubmission}
           refreshKey={listRefresh}
@@ -266,7 +363,7 @@ export default function App() {
 }
 
 function SubmissionView({ submission, onDelete }) {
-  const { id, student_label, status, transcription, flags, corrected_code, error_message } = submission
+  const { id, student_label, status, transcription, flags, corrected_code, error_message, question } = submission
   const pending = !DONE.includes(status)
   const uncertainLines = (flags?.uncertain_lines ?? []).map((u) => u.line)
   const syntaxErrors = (flags?.static_flags ?? []).filter((f) => f.reason.startsWith('syntax error'))
@@ -276,6 +373,7 @@ function SubmissionView({ submission, onDelete }) {
       <div className="status-row">
         Submission #{id}
         {student_label && ` (${student_label})`}: <span className={`status status-${status}`}>{status}</span>
+        {question && <span className="hint">{questionLabel(question)}</span>}
         {pending && <span className="hint"> checking every {POLL_MS / 1000}s...</span>}
         <button type="button" className="danger" onClick={onDelete}>
           Delete submission

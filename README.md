@@ -30,27 +30,52 @@ copy .env.example .env   # then set MODEL_API_KEY
 python -m backend.app          # API on http://127.0.0.1:5000 plus the worker
 python -m pytest tests         # sandbox and API tests (no model calls)
 python -m backend.transcribe samples/simple_python1.jpg   # one transcription
-python -m backend.pipeline <image> <assignment_id>        # one submission, CLI
+python -m backend.pipeline <image> <question_id>          # one submission, CLI
 ```
 
 Runtime data (SQLite db, uploaded photos, API response cache) lives in
 `backend/data/`, which is gitignored.
 
+## Data model
+
+An assignment has questions. Each question has its own points, test cases,
+and submissions (one photo per student per question). SQLite, five tables:
+
+| Table | Columns |
+|---|---|
+| `assignments` | id, title, language |
+| `questions` | id, assignment_id, position, title, prompt, max_points, exact_match |
+| `test_cases` | id, question_id, input, expected_output |
+| `submissions` | id, question_id, student_label, image_path, status, transcription, corrected_code, verdict, suggested_score, final_score, notes, flags, error_message |
+| `test_results` | id, submission_id, test_case_id, version, passed, actual_output, error |
+
+- An assignment's `total_points` is the sum of its questions' `max_points`,
+  computed on read rather than stored.
+- `status` is `queued`, `processing`, `ready`, `graded`, or `error`.
+- `version` is `original` or `corrected` (the syntax-fix toggle).
+- `flags` is JSON: the model's `uncertain_lines` plus the `ast` static checks.
+
 ## API
 
 | Method | Route | Body |
 |---|---|---|
-| POST | `/api/assignments` | `{title, max_points, prompt?, exact_match?}` |
+| POST | `/api/assignments` | `{title, language?}` |
 | GET | `/api/assignments`, `/api/assignments/<id>` | |
-| POST | `/api/assignments/<id>/tests` | `{input, expected_output}` |
+| DELETE | `/api/assignments/<id>` | |
+| POST | `/api/assignments/<id>/questions` | `{max_points, title?, prompt?, exact_match?, position?}` |
+| GET, DELETE | `/api/questions/<id>` | |
+| POST | `/api/questions/<id>/tests` | `{input, expected_output}` |
 | DELETE | `/api/tests/<id>` | |
-| POST | `/api/assignments/<id>/submissions` | multipart `files`, optional `labels` |
-| GET | `/api/assignments/<id>/submissions` | |
-| GET | `/api/submissions/<id>`, `/api/submissions/<id>/image` | |
+| POST | `/api/questions/<id>/submissions` | multipart `files`, optional `labels` |
+| GET | `/api/questions/<id>/submissions` | |
+| GET, DELETE | `/api/submissions/<id>` | |
+| GET | `/api/submissions/<id>/image` | |
 | POST | `/api/submissions/<id>/rerun` | `{code}` |
 | POST | `/api/submissions/<id>/requeue` | |
 | POST | `/api/submissions/<id>/grade` | `{final_score, notes?}` |
-| GET | `/api/assignments/<id>/export.csv` | |
+
+Deleting an assignment or question also deletes everything under it,
+including uploaded photos. CSV export is not implemented yet.
 
 ## Sandbox
 

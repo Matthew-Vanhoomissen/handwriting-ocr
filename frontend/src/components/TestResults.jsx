@@ -2,7 +2,7 @@
 // points each test is worth, and pass/fail, with the total at the bottom.
 //
 // The backend doesn't send a per-test score. It scores a submission as
-// max_points * passed / total (backend/scoring.py), so each test is worth
+// question.max_points * passed / total (backend/scoring.py), so each test is worth
 // max_points / total. The total row uses the backend's suggested_score so the
 // table always agrees with it, even where rounding the per-test shares wouldn't.
 
@@ -11,13 +11,13 @@ const VERSION_TITLES = { original: 'Transcribed code', corrected: 'Corrected cod
 const fmt = (n) => String(Math.round(n * 100) / 100)
 
 export default function TestResults({ submission }) {
-  const { status, test_results: results = [], assignment, suggested_score, score_reasoning } = submission
+  const { status, test_results: results = [], question, suggested_score, score_reasoning } = submission
   const pending = status === 'queued' || status === 'processing'
 
   let body
   if (pending) body = <p className="placeholder">Tests run after transcription finishes.</p>
   else if (status === 'error') body = <p className="placeholder">No test results: processing failed.</p>
-  else if (results.length === 0) body = <p className="placeholder">No test results: the assignment had no test cases when this submission was processed.</p>
+  else if (results.length === 0) body = <p className="placeholder">No test results: the question had no test cases when this submission was processed.</p>
   else {
     // One table per code version, original first ("corrected" appears once the syntax-fix step exists).
     const versions = ['original', 'corrected'].filter((v) => results.some((r) => r.version === v))
@@ -26,7 +26,7 @@ export default function TestResults({ submission }) {
         key={v}
         title={versions.length > 1 ? VERSION_TITLES[v] : null}
         rows={results.filter((r) => r.version === v)}
-        maxPoints={assignment?.max_points}
+        maxPoints={question?.max_points}
         total={v === 'original' ? suggested_score : null}
       />
     ))

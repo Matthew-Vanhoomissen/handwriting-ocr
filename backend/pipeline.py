@@ -3,7 +3,7 @@
 Shared by the worker and the command line. Failure investigation (agent.py)
 plugs in here later.
 
-Usage: python -m backend.pipeline <image> <assignment_id> [student_label]
+Usage: python -m backend.pipeline <image> <question_id> [student_label]
 """
 
 import sys
@@ -33,14 +33,14 @@ def run_tests(code, test_cases, exact_match=False):
     return results
 
 
-def _grade(submission_id, assignment, code):
+def _grade(submission_id, question, code):
     """Run tests on code, store results, and set the suggested score."""
-    tests = db.list_test_cases(assignment["id"])
-    results = run_tests(code, tests, bool(assignment["exact_match"]))
+    tests = db.list_test_cases(question["id"])
+    results = run_tests(code, tests, bool(question["exact_match"]))
     db.replace_test_results(submission_id, "original", results)
 
     passed = sum(r["passed"] for r in results)
-    score, _ = suggest_score(assignment["max_points"], passed, len(results))
+    score, _ = suggest_score(question["max_points"], passed, len(results))
     # Until failure investigation exists, failed submissions get no verdict.
     verdict = "pass" if results and passed == len(results) else None
     return score, verdict
@@ -48,14 +48,14 @@ def _grade(submission_id, assignment, code):
 
 def process_submission(submission_id):
     sub = db.get_submission(submission_id)
-    assignment = db.get_assignment(sub["assignment_id"])
+    question = db.get_question(sub["question_id"])
 
     result = transcribe(sub["image_path"])
     code = result["code"]
     flags = {"uncertain_lines": result["uncertain_lines"],
              "static_flags": result["static_flags"]}
 
-    score, verdict = _grade(submission_id, assignment, code)
+    score, verdict = _grade(submission_id, question, code)
     db.update_submission(submission_id, transcription=code, flags=flags,
                          suggested_score=score, verdict=verdict,
                          status="ready", error_message=None)
@@ -68,11 +68,11 @@ def rerun_submission(submission_id, code):
     are kept for reference; static flags are recomputed for the new code.
     """
     sub = db.get_submission(submission_id)
-    assignment = db.get_assignment(sub["assignment_id"])
+    question = db.get_question(sub["question_id"])
     flags = dict(sub["flags"] or {})
     flags["static_flags"] = static_flags(code)
 
-    score, verdict = _grade(submission_id, assignment, code)
+    score, verdict = _grade(submission_id, question, code)
     db.update_submission(submission_id, transcription=code, flags=flags,
                          suggested_score=score, verdict=verdict)
 
@@ -80,13 +80,13 @@ def rerun_submission(submission_id, code):
 def main():
     if len(sys.argv) < 3:
         sys.exit(__doc__)
-    image, assignment_id = sys.argv[1], int(sys.argv[2])
+    image, question_id = sys.argv[1], int(sys.argv[2])
     label = sys.argv[3] if len(sys.argv) > 3 else Path(image).stem
 
     db.init_db()
-    if not db.get_assignment(assignment_id):
-        sys.exit(f"No assignment with id {assignment_id}")
-    submission_id = db.create_submission(assignment_id, label, image)
+    if not db.get_question(question_id):
+        sys.exit(f"No question with id {question_id}")
+    submission_id = db.create_submission(question_id, label, image)
     db.update_submission(submission_id, status="processing")
     process_submission(submission_id)
 

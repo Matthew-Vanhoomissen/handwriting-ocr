@@ -112,6 +112,22 @@ input:not([type=checkbox]):not([type=file]), textarea, select { font: inherit; p
 textarea { font-family: Consolas, Menlo, monospace; font-size: 0.9rem; resize: vertical; }
 
 .assignment-info { margin-top: 12px; font-size: 0.9rem; }
+
+/* Question list in the assignment panel; same look as the submissions sidebar items. */
+.question-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.question-item {
+  width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px;
+  text-align: left; background: #fafafa; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font: inherit;
+}
+.question-item:hover { background: #f0f0f0; }
+.question-item.selected { background: #e7f0ff; border-color: #8fb3e8; }
+.question-item.add { justify-content: center; background: transparent; border-style: dashed; color: #555; }
+.question-item .item-meta { flex: none; }
+
+.panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.panel-header h2 { margin: 0; }
+.question-panel h3 { font-size: 0.95rem; margin: 16px 0 6px; }
+.sidebar-subtitle { margin-top: 2px; }
 .assignment-info .prompt { white-space: pre-wrap; margin: 8px 0 0; }
 
 .tests { width: 100%; border-collapse: collapse; font-size: 0.9rem; }

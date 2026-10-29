@@ -1,7 +1,9 @@
 // In-browser stand-in for the Flask API. Responses match the contract in
-// CLAUDE.md section 12 (which mirrors backend/app.py). Each upload walks
-// queued -> processing -> final, where the final state comes from the
-// scenario picked in the UI. Data lives in memory and resets on reload.
+// CLAUDE.md section 12 (which mirrors backend/app.py): assignments hold
+// questions, and each question has its own points, test cases, and
+// submissions. Each upload walks queued -> processing -> final, where the
+// final state comes from the scenario picked in the UI. Data lives in memory
+// and resets on reload.
 
 const QUEUED_MS = 2500
 const PROCESSING_MS = 5000
@@ -80,66 +82,71 @@ function outputsMatch(actual, expected, exact) {
   return norm(actual) === norm(expected)
 }
 
-// Fake a test run against the assignment's current test cases, scored like
-// backend/scoring.py. Results are computed on read, so they follow later test edits.
-function runMockTests(submissionId, assignment, run) {
-  if (!run || !assignment) return { test_results: [], verdict: null, suggested_score: null, score_reasoning: null }
-  const tests = [...testCases.values()].filter((t) => t.assignment_id === assignment.id)
-  const test_results = tests.map((t, i) => {
-    const { actual_output, error } = run(t)
-    const passed = error == null && outputsMatch(actual_output, t.expected_output, Boolean(assignment.exact_match))
-    return {
-      id: submissionId * 100 + i,
-      submission_id: submissionId,
-      test_case_id: t.id,
-      version: 'original',
-      passed: passed ? 1 : 0,
-      actual_output,
-      error,
-      input: t.input,
-      expected_output: t.expected_output,
-    }
-  })
-  const total = test_results.length
-  const passed = test_results.filter((r) => r.passed).length
-  if (total === 0) return { test_results, verdict: null, suggested_score: null, score_reasoning: null }
-  const score = Math.round((assignment.max_points * passed / total) * 100) / 100
-  return {
-    test_results,
-    verdict: passed === total ? 'pass' : null,
-    suggested_score: score,
-    score_reasoning: `Passed ${passed} of ${total} tests: ${assignment.max_points} x ${passed}/${total} = ${score}.`,
-  }
-}
-
+// In-memory tables, mirroring backend/db.py. Booleans are stored as 0/1 like SQLite.
 const assignments = new Map()
+const questions = new Map()
 const testCases = new Map()
-const submissions = new Map()
+const submissions = new Map() // id -> { createdAt, scenario, questionId, label }
 let nextAssignmentId = 1
+let nextQuestionId = 1
 let nextTestId = 1
 let nextSubmissionId = 7
 let scenario = 'ready_plain'
 
-function insertAssignment({ title, prompt = '', max_points, exact_match = false }) {
-  const row = { id: nextAssignmentId++, title, prompt, max_points: Number(max_points), language: 'python', exact_match: exact_match ? 1 : 0 }
+const questionsOf = (assignmentId) =>
+  [...questions.values()].filter((q) => q.assignment_id === assignmentId).sort((a, b) => a.position - b.position || a.id - b.id)
+const testsOf = (questionId) => [...testCases.values()].filter((t) => t.question_id === questionId)
+
+// Assignment row plus the computed totals the backend adds (ASSIGNMENT_SELECT).
+function assignmentRow(a) {
+  const qs = questionsOf(a.id)
+  return { ...a, question_count: qs.length, total_points: qs.reduce((sum, q) => sum + q.max_points, 0) }
+}
+
+const questionWithTests = (q) => ({ ...q, test_cases: testsOf(q.id) })
+
+function insertAssignment({ title, language = 'python' }) {
+  const row = { id: nextAssignmentId++, title, language }
   assignments.set(row.id, row)
   return row
 }
 
-function insertTestCase(assignmentId, { input = '', expected_output }) {
-  const row = { id: nextTestId++, assignment_id: assignmentId, input, expected_output }
+function insertQuestion(assignmentId, { max_points, title = '', prompt = '', exact_match = false, position = null }) {
+  const pos = position ?? questionsOf(assignmentId).reduce((m, q) => Math.max(m, q.position), 0) + 1
+  const row = {
+    id: nextQuestionId++,
+    assignment_id: assignmentId,
+    position: pos,
+    title,
+    prompt,
+    max_points: Number(max_points),
+    exact_match: exact_match ? 1 : 0,
+  }
+  questions.set(row.id, row)
+  return row
+}
+
+function insertTestCase(questionId, { input = '', expected_output }) {
+  const row = { id: nextTestId++, question_id: questionId, input, expected_output }
   testCases.set(row.id, row)
   return row
 }
 
-// Seed one assignment so the page is usable right away.
-const seeded = insertAssignment({ title: 'Add two numbers (mock)', prompt: 'Read two ints, print their sum.', max_points: 10 })
-insertTestCase(seeded.id, { input: '2 3\n', expected_output: '5\n' })
-insertTestCase(seeded.id, { input: '-1 1\n', expected_output: '0\n' })
-
-// Seed already-finished submissions so the side panel has something to show.
-for (const [label, name] of [['sample_01', 'ready_plain'], ['sample_02', 'ready_corrected'], ['sample_03', 'error']]) {
-  submissions.set(nextSubmissionId++, { createdAt: 0, scenario: name, assignmentId: seeded.id, label })
+// Seed one assignment with three questions (one untitled, to exercise the
+// "Question N" fallback) and some finished submissions.
+const seeded = insertAssignment({ title: 'Homework 1 (mock)' })
+const q1 = insertQuestion(seeded.id, { title: 'Add two numbers', prompt: 'Read two ints on one line, print their sum.', max_points: 10 })
+insertTestCase(q1.id, { input: '2 3\n', expected_output: '5\n' })
+insertTestCase(q1.id, { input: '-1 1\n', expected_output: '0\n' })
+const q2 = insertQuestion(seeded.id, { title: 'Average of a list', prompt: 'Print the average of [1, 2, 3].', max_points: 5 })
+insertTestCase(q2.id, { input: '', expected_output: '2.0\n' })
+insertQuestion(seeded.id, { title: '', prompt: '', max_points: 2 })
+for (const [label, name, questionId] of [
+  ['sample_01', 'ready_plain', q1.id],
+  ['sample_03', 'error', q1.id],
+  ['sample_02', 'ready_corrected', q2.id],
+]) {
+  submissions.set(nextSubmissionId++, { createdAt: 0, scenario: name, questionId, label })
 }
 
 export function setScenario(name) {
@@ -154,51 +161,85 @@ function fail(method, url, status, error) {
   return err
 }
 
-function assignmentOr404(method, url, id) {
-  const row = assignments.get(Number(id))
+function or404(table, method, url, id) {
+  const row = table.get(Number(id))
   if (!row) throw fail(method, url, 404, 'Not Found')
   return row
 }
 
+// Delete the submissions matching `pred`, like db._delete_submissions_where.
+function deleteSubmissionsWhere(pred) {
+  for (const [id, s] of submissions) if (pred(s)) submissions.delete(id)
+}
+
+// Assignments
+
 export async function listAssignments() {
   await delay(100)
-  return { status: 200, body: [...assignments.values()] }
+  return { status: 200, body: [...assignments.values()].map(assignmentRow) }
 }
 
 export async function getAssignment(id) {
   await delay(100)
-  const row = assignmentOr404('GET', `/api/assignments/${id}`, id)
-  const tests = [...testCases.values()].filter((t) => t.assignment_id === row.id)
-  return { status: 200, body: { ...row, test_cases: tests } }
+  const a = or404(assignments, 'GET', `/api/assignments/${id}`, id)
+  return { status: 200, body: { ...assignmentRow(a), questions: questionsOf(a.id).map(questionWithTests) } }
 }
 
 export async function createAssignment(fields) {
   await delay(150)
-  const url = '/api/assignments'
-  if (!fields.title || fields.max_points == null || fields.max_points === '') {
-    throw fail('POST', url, 400, 'title and max_points are required')
-  }
-  if (Number.isNaN(Number(fields.max_points))) throw fail('POST', url, 400, 'max_points must be a number')
-  return { status: 201, body: insertAssignment(fields) }
+  if (!fields.title) throw fail('POST', '/api/assignments', 400, 'title is required')
+  const a = insertAssignment(fields)
+  return { status: 201, body: { ...assignmentRow(a), questions: [] } }
 }
 
-// Like the backend: removes the assignment's tests and submissions too, and
-// returns 204 even if the id doesn't exist.
+// Like the backend: removes everything under the assignment, and returns 204
+// even if the id doesn't exist.
 export async function deleteAssignment(id) {
   await delay(150)
   const assignmentId = Number(id)
-  for (const [testId, t] of testCases) if (t.assignment_id === assignmentId) testCases.delete(testId)
-  for (const [subId, s] of submissions) if (s.assignmentId === assignmentId) submissions.delete(subId)
+  const qids = new Set(questionsOf(assignmentId).map((q) => q.id))
+  deleteSubmissionsWhere((s) => qids.has(s.questionId))
+  for (const [tid, t] of testCases) if (qids.has(t.question_id)) testCases.delete(tid)
+  for (const qid of qids) questions.delete(qid)
   assignments.delete(assignmentId)
   return { status: 204, body: null }
 }
 
-export async function addTestCase(assignmentId, fields) {
+// Questions
+
+export async function createQuestion(assignmentId, fields) {
   await delay(150)
-  const url = `/api/assignments/${assignmentId}/tests`
-  assignmentOr404('POST', url, assignmentId)
+  const url = `/api/assignments/${assignmentId}/questions`
+  or404(assignments, 'POST', url, assignmentId)
+  if (fields.max_points == null || fields.max_points === '' || Number.isNaN(Number(fields.max_points))) {
+    throw fail('POST', url, 400, 'max_points must be a number')
+  }
+  if (fields.position != null && !Number.isInteger(fields.position)) throw fail('POST', url, 400, 'position must be an integer')
+  return { status: 201, body: questionWithTests(insertQuestion(Number(assignmentId), fields)) }
+}
+
+// Removes the question's tests and submissions, and moves later questions up
+// one position so numbering stays 1..n.
+export async function deleteQuestion(id) {
+  await delay(150)
+  const q = questions.get(Number(id))
+  if (q) {
+    deleteSubmissionsWhere((s) => s.questionId === q.id)
+    for (const [tid, t] of testCases) if (t.question_id === q.id) testCases.delete(tid)
+    questions.delete(q.id)
+    for (const other of questionsOf(q.assignment_id)) if (other.position > q.position) other.position -= 1
+  }
+  return { status: 204, body: null }
+}
+
+// Test cases
+
+export async function addTestCase(questionId, fields) {
+  await delay(150)
+  const url = `/api/questions/${questionId}/tests`
+  or404(questions, 'POST', url, questionId)
   if (!('expected_output' in fields)) throw fail('POST', url, 400, 'expected_output is required')
-  return { status: 201, body: { id: insertTestCase(Number(assignmentId), fields).id } }
+  return { status: 201, body: { id: insertTestCase(Number(questionId), fields).id } }
 }
 
 export async function deleteTestCase(id) {
@@ -207,16 +248,50 @@ export async function deleteTestCase(id) {
   return { status: 204, body: null }
 }
 
-export async function createSubmission(assignmentId, file, label) {
+// Submissions
+
+export async function createSubmission(questionId, file, label) {
   await delay(300)
-  const url = `/api/assignments/${assignmentId}/submissions`
-  assignmentOr404('POST', url, assignmentId)
+  const url = `/api/questions/${questionId}/submissions`
+  or404(questions, 'POST', url, questionId)
   const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
   if (!ALLOWED_EXTENSIONS.includes(ext)) throw fail('POST', url, 400, `${file.name}: use jpg, png, or webp`)
   const id = nextSubmissionId++
   const fileStem = file.name.slice(0, file.name.lastIndexOf('.'))
-  submissions.set(id, { createdAt: Date.now(), scenario, assignmentId: Number(assignmentId), label: label || fileStem })
+  submissions.set(id, { createdAt: Date.now(), scenario, questionId: Number(questionId), label: label || fileStem })
   return { status: 201, body: { submission_ids: [id] } }
+}
+
+// Fake a test run against the question's current test cases, scored like
+// backend/scoring.py. Results are computed on read, so they follow later test edits.
+function runMockTests(submissionId, question, run) {
+  const none = { test_results: [], verdict: null, suggested_score: null, score_reasoning: null }
+  if (!run || !question) return none
+  const test_results = testsOf(question.id).map((t, i) => {
+    const { actual_output, error } = run(t)
+    const passed = error == null && outputsMatch(actual_output, t.expected_output, Boolean(question.exact_match))
+    return {
+      id: submissionId * 100 + i,
+      submission_id: submissionId,
+      test_case_id: t.id,
+      version: 'original',
+      passed: passed ? 1 : 0,
+      actual_output,
+      error,
+      input: t.input,
+      expected_output: t.expected_output,
+    }
+  })
+  const total = test_results.length
+  const passed = test_results.filter((r) => r.passed).length
+  if (total === 0) return none
+  const score = Math.round((question.max_points * passed / total) * 100) / 100
+  return {
+    test_results,
+    verdict: passed === total ? 'pass' : null,
+    suggested_score: score,
+    score_reasoning: `Passed ${passed} of ${total} tests: ${question.max_points} x ${passed}/${total} = ${score}.`,
+  }
 }
 
 // Full submission object as GET /api/submissions/:id returns it.
@@ -227,11 +302,12 @@ function buildSubmission(id, sub) {
   else if (elapsed < QUEUED_MS + PROCESSING_MS) state = { status: 'processing', ...PENDING }
   else state = FINAL[sub.scenario]
 
-  const assignment = assignments.get(sub.assignmentId) ?? null
-  const graded = runMockTests(id, assignment, state.run)
+  const question = questions.get(sub.questionId) ?? null
+  const assignment = question ? assignmentRow(assignments.get(question.assignment_id)) : null
+  const graded = runMockTests(id, question, state.run)
   return {
     id,
-    assignment_id: sub.assignmentId,
+    question_id: sub.questionId,
     student_label: sub.label,
     status: state.status,
     transcription: state.transcription,
@@ -242,35 +318,23 @@ function buildSubmission(id, sub) {
     suggested_score: graded.suggested_score,
     final_score: null,
     notes: null,
+    question,
     assignment,
     test_results: graded.test_results,
     score_reasoning: graded.score_reasoning,
   }
 }
 
-export async function getSubmission(id) {
+export async function listSubmissions(questionId) {
   await delay(150)
-  const sub = submissions.get(Number(id))
-  if (!sub) throw fail('GET', `/api/submissions/${id}`, 404, 'Not Found')
-  return { status: 200, body: buildSubmission(Number(id), sub) }
-}
-
-export async function deleteSubmission(id) {
-  await delay(150)
-  submissions.delete(Number(id))
-  return { status: 204, body: null }
-}
-
-export async function listSubmissions(assignmentId) {
-  await delay(150)
-  assignmentOr404('GET', `/api/assignments/${assignmentId}/submissions`, assignmentId)
+  or404(questions, 'GET', `/api/questions/${questionId}/submissions`, questionId)
   const rows = [...submissions.entries()]
-    .filter(([, sub]) => sub.assignmentId === Number(assignmentId))
+    .filter(([, sub]) => sub.questionId === Number(questionId))
     .map(([id, sub]) => {
       const s = buildSubmission(id, sub)
       return {
         id: s.id,
-        assignment_id: s.assignment_id,
+        question_id: s.question_id,
         student_label: s.student_label,
         status: s.status,
         verdict: s.verdict,
@@ -282,7 +346,20 @@ export async function listSubmissions(assignmentId) {
   return { status: 200, body: rows }
 }
 
+export async function getSubmission(id) {
+  await delay(150)
+  const sub = or404(submissions, 'GET', `/api/submissions/${id}`, id)
+  return { status: 200, body: buildSubmission(Number(id), sub) }
+}
+
+export async function deleteSubmission(id) {
+  await delay(150)
+  submissions.delete(Number(id))
+  return { status: 204, body: null }
+}
+
 export function imageUrl(id) {
   const sub = submissions.get(Number(id))
   return IMAGES[sub?.scenario ?? 'ready_plain']
 }
+

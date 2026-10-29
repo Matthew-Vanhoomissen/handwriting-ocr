@@ -4,24 +4,24 @@ import { api } from '../api.js'
 const REFRESH_MS = 3000
 const PENDING = ['queued', 'processing']
 
-// Right-hand panel listing the selected assignment's submissions. Refreshes
+// Right-hand panel listing the selected question's submissions. Refreshes
 // while anything is still queued or processing; `refreshKey` forces a reload
 // (e.g. after an upload). List responses are kept out of the Raw JSON panel so
 // background refreshes don't replace the submission being debugged.
-export default function SubmissionList({ assignmentId, selectedId, onSelect, refreshKey, open, onToggle }) {
+export default function SubmissionList({ questionId, questionName, selectedId, onSelect, refreshKey, open, onToggle }) {
   const [rows, setRows] = useState(null) // null while loading
   const [error, setError] = useState(null)
 
   useEffect(() => {
     setRows(null)
     setError(null)
-    if (assignmentId == null) return
+    if (questionId == null) return
     let cancelled = false
     let timer
 
     async function load() {
       try {
-        const res = await api.listSubmissions(assignmentId)
+        const res = await api.listSubmissions(questionId)
         if (cancelled) return
         setRows(res.body)
         setError(null)
@@ -36,7 +36,7 @@ export default function SubmissionList({ assignmentId, selectedId, onSelect, ref
       cancelled = true
       clearTimeout(timer)
     }
-  }, [assignmentId, refreshKey])
+  }, [questionId, refreshKey])
 
   if (!open) {
     return (
@@ -56,9 +56,10 @@ export default function SubmissionList({ assignmentId, selectedId, onSelect, ref
           Hide
         </button>
       </div>
+      {questionName && <div className="hint sidebar-subtitle">{questionName}</div>}
 
-      {assignmentId == null ? (
-        <p className="placeholder">Select an assignment.</p>
+      {questionId == null ? (
+        <p className="placeholder">Select a question.</p>
       ) : error ? (
         <div className="banner error">{error}</div>
       ) : rows == null ? (

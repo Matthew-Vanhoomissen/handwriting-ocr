@@ -1,16 +1,15 @@
-"""Flask routes for assignments, tests, uploads, submissions, and grades.
+"""Flask routes for assignments, questions, tests, uploads, and submissions.
 
-Also serves CSV export.
+An assignment holds questions; each question holds its own test cases and
+submissions. Submission routes are keyed by submission id alone.
 
 Run with: python -m backend.app  (starts the API and the worker thread)
 """
 
-import csv
-import io
 import uuid
 from pathlib import Path
 
-from flask import Flask, Response, abort, jsonify, request, send_file
+from flask import Flask, abort, jsonify, request, send_file
 
 from backend import db, worker
 from backend.pipeline import rerun_submission
@@ -34,6 +33,13 @@ def _assignment_or_404(assignment_id):
     return assignment
 
 
+def _question_or_404(question_id):
+    question = db.get_question(question_id)
+    if not question:
+        abort(404)
+    return question
+
+
 def _submission_or_404(submission_id):
     sub = db.get_submission(submission_id)
     if not sub:
@@ -41,47 +47,10 @@ def _submission_or_404(submission_id):
     return sub
 
 
-# Assignments and test cases
+def _question_with_tests(question):
+    question["test_cases"] = db.list_test_cases(question["id"])
+    return question
 
-@app.post("/api/assignments")
-def create_assignment():
-    body = request.get_json(silent=True) or {}
-    if not body.get("title") or body.get("max_points") is None:
-        return _bad_request("title and max_points are required")
-    try:
-        max_points = float(body["max_points"])
-    except (TypeError, ValueError):
-        return _bad_request("max_points must be a number")
-    assignment_id = db.create_assignment(
-        body["title"], body.get("prompt", ""), max_points,
-        bool(body.get("exact_match", False)))
-    return jsonify(db.get_assignment(assignment_id)), 201
-
-
-@app.get("/api/assignments")
-def list_assignments():
-    return jsonify(db.list_assignments())
-
-
-@app.get("/api/assignments/<int:assignment_id>")
-def get_assignment(assignment_id):
-    assignment = _assignment_or_404(assignment_id)
-    assignment["test_cases"] = db.list_test_cases(assignment_id)
-    return jsonify(assignment)
-
-
-@app.post("/api/assignments/<int:assignment_id>/tests")
-def add_test_case(assignment_id):
-    _assignment_or_404(assignment_id)
-    body = request.get_json(silent=True) or {}
-    if "expected_output" not in body:
-        return _bad_request("expected_output is required")
-    test_id = db.add_test_case(assignment_id, body.get("input", ""),
-                               body["expected_output"])
-    return jsonify({"id": test_id}), 201
-
-
-# Deletions
 
 def _delete_upload(image_path):
     """Remove an uploaded photo. Files outside UPLOAD_DIR are left alone.
@@ -96,10 +65,34 @@ def _delete_upload(image_path):
         path.unlink(missing_ok=True)
 
 
-@app.delete("/api/tests/<int:test_case_id>")
-def delete_test_case(test_case_id):
-    db.delete_test_case(test_case_id)
-    return "", 204
+# Assignments
+
+@app.post("/api/assignments")
+def create_assignment():
+    body = request.get_json(silent=True) or {}
+    if not body.get("title"):
+        return _bad_request("title is required")
+    assignment_id = db.create_assignment(body["title"],
+                                         body.get("language", "python"))
+    return jsonify(_assignment_detail(assignment_id)), 201
+
+
+@app.get("/api/assignments")
+def list_assignments():
+    return jsonify(db.list_assignments())
+
+
+@app.get("/api/assignments/<int:assignment_id>")
+def get_assignment(assignment_id):
+    return jsonify(_assignment_detail(assignment_id))
+
+
+def _assignment_detail(assignment_id):
+    """Assignment with its questions in order, each with its test cases."""
+    assignment = _assignment_or_404(assignment_id)
+    assignment["questions"] = [_question_with_tests(q) for q in
+                               db.list_questions(assignment_id)]
+    return assignment
 
 
 @app.delete("/api/assignments/<int:assignment_id>")
@@ -109,20 +102,67 @@ def delete_assignment(assignment_id):
     return "", 204
 
 
-@app.delete("/api/submissions/<int:submission_id>")
-def delete_submission(submission_id):
-    _delete_upload(db.delete_submission(submission_id))
+# Questions
+
+@app.post("/api/assignments/<int:assignment_id>/questions")
+def create_question(assignment_id):
+    _assignment_or_404(assignment_id)
+    body = request.get_json(silent=True) or {}
+    try:
+        max_points = float(body["max_points"])
+    except (KeyError, TypeError, ValueError):
+        return _bad_request("max_points must be a number")
+    position = body.get("position")
+    if position is not None and not isinstance(position, int):
+        return _bad_request("position must be an integer")
+    question_id = db.create_question(
+        assignment_id, max_points, title=body.get("title", ""),
+        prompt=body.get("prompt", ""),
+        exact_match=bool(body.get("exact_match", False)), position=position)
+    return jsonify(_question_with_tests(db.get_question(question_id))), 201
+
+
+@app.get("/api/questions/<int:question_id>")
+def get_question(question_id):
+    return jsonify(_question_with_tests(_question_or_404(question_id)))
+
+
+@app.delete("/api/questions/<int:question_id>")
+def delete_question(question_id):
+    for image_path in db.delete_question(question_id):
+        _delete_upload(image_path)
     return "", 204
+
+
+# Test cases
+
+@app.post("/api/questions/<int:question_id>/tests")
+def add_test_case(question_id):
+    _question_or_404(question_id)
+    body = request.get_json(silent=True) or {}
+    if "expected_output" not in body:
+        return _bad_request("expected_output is required")
+    test_id = db.add_test_case(question_id, body.get("input", ""),
+                               body["expected_output"])
+    return jsonify({"id": test_id}), 201
+
+
+@app.delete("/api/tests/<int:test_case_id>")
+def delete_test_case(test_case_id):
+    db.delete_test_case(test_case_id)
+    return "", 204
+
 
 # Uploads and submissions
 
-@app.post("/api/assignments/<int:assignment_id>/submissions")
-def upload_submissions(assignment_id):
+@app.post("/api/questions/<int:question_id>/submissions")
+def upload_submissions(question_id):
     """Multipart upload: one or more 'files', optional matching 'labels'.
 
-    Labels default to the file name. Use anonymized labels, not real names.
+    One photo per student for this question. Labels default to the file
+    name. Use anonymized labels, not real names.
     """
-    _assignment_or_404(assignment_id)
+    _question_or_404(question_id)
     files = request.files.getlist("files")
     labels = request.form.getlist("labels")
     if not files:
@@ -139,26 +179,28 @@ def upload_submissions(assignment_id):
         f.save(path)
         label = labels[i] if i < len(labels) and labels[i] else \
             Path(f.filename).stem
-        created.append(db.create_submission(assignment_id, label, str(path)))
+        created.append(db.create_submission(question_id, label, str(path)))
     return jsonify({"submission_ids": created}), 201
 
 
-@app.get("/api/assignments/<int:assignment_id>/submissions")
-def list_submissions(assignment_id):
-    _assignment_or_404(assignment_id)
-    return jsonify(db.list_submissions(assignment_id))
+@app.get("/api/questions/<int:question_id>/submissions")
+def list_submissions(question_id):
+    _question_or_404(question_id)
+    return jsonify(db.list_submissions(question_id))
 
 
 @app.get("/api/submissions/<int:submission_id>")
 def get_submission(submission_id):
     sub = _submission_or_404(submission_id)
-    assignment = db.get_assignment(sub["assignment_id"])
+    question = db.get_question(sub["question_id"])
+    assignment = db.get_assignment(question["assignment_id"])
     results = db.list_test_results(submission_id)
     original = [r for r in results if r["version"] == "original"]
-    _, reasoning = suggest_score(assignment["max_points"],
+    _, reasoning = suggest_score(question["max_points"],
                                  sum(r["passed"] for r in original),
                                  len(original))
     sub.pop("image_path")
+    sub["question"] = question
     sub["assignment"] = assignment
     sub["test_results"] = results
     sub["score_reasoning"] = reasoning if original else None
@@ -202,21 +244,10 @@ def grade(submission_id):
     return get_submission(submission_id)
 
 
-@app.get("/api/assignments/<int:assignment_id>/export.csv")
-def export_csv(assignment_id):
-    assignment = _assignment_or_404(assignment_id)
-    buf = io.StringIO()
-    writer = csv.writer(buf)
-    writer.writerow(["student_label", "status", "suggested_score",
-                     "final_score", "max_points", "verdict", "notes"])
-    for s in db.list_submissions(assignment_id):
-        notes = db.get_submission(s["id"])["notes"]
-        writer.writerow([s["student_label"], s["status"],
-                         s["suggested_score"], s["final_score"],
-                         assignment["max_points"], s["verdict"], notes])
-    filename = f"assignment_{assignment_id}_grades.csv"
-    return Response(buf.getvalue(), mimetype="text/csv", headers={
-        "Content-Disposition": f"attachment; filename={filename}"})
+@app.delete("/api/submissions/<int:submission_id>")
+def delete_submission(submission_id):
+    _delete_upload(db.delete_submission(submission_id))
+    return "", 204
 
 
 def main():

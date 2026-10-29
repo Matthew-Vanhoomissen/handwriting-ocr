@@ -31,6 +31,7 @@ async function request(method, url, body) {
 }
 
 const real = {
+  // Assignments
   listAssignments() {
     return request('GET', '/api/assignments')
   },
@@ -43,21 +44,33 @@ const real = {
   deleteAssignment(id) {
     return request('DELETE', `/api/assignments/${id}`)
   },
-  addTestCase(assignmentId, fields) {
-    return request('POST', `/api/assignments/${assignmentId}/tests`, fields)
+
+  // Questions
+  createQuestion(assignmentId, fields) {
+    return request('POST', `/api/assignments/${assignmentId}/questions`, fields)
+  },
+  deleteQuestion(id) {
+    return request('DELETE', `/api/questions/${id}`)
+  },
+
+  // Test cases
+  addTestCase(questionId, fields) {
+    return request('POST', `/api/questions/${questionId}/tests`, fields)
   },
   deleteTestCase(id) {
     return request('DELETE', `/api/tests/${id}`)
   },
+
+  // Submissions
   // `label` is optional; the backend falls back to the file name when it's missing.
-  createSubmission(assignmentId, file, label) {
+  createSubmission(questionId, file, label) {
     const form = new FormData()
     form.append('files', file)
     if (label) form.append('labels', label)
-    return request('POST', `/api/assignments/${assignmentId}/submissions`, form)
+    return request('POST', `/api/questions/${questionId}/submissions`, form)
   },
-  listSubmissions(assignmentId) {
-    return request('GET', `/api/assignments/${assignmentId}/submissions`)
+  listSubmissions(questionId) {
+    return request('GET', `/api/questions/${questionId}/submissions`)
   },
   getSubmission(id) {
     return request('GET', `/api/submissions/${id}`)
