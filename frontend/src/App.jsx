@@ -3,6 +3,7 @@ import { api, USE_MOCK } from './api.js'
 import { SCENARIOS, setScenario } from './mockApi.js'
 import CodeBlock from './CodeBlock.jsx'
 import AssignmentSetup from './AssignmentSetup.jsx'
+import SubmissionList from './SubmissionList.jsx'
 
 const POLL_MS = 1500
 const DONE = ['ready', 'graded', 'error']
@@ -16,6 +17,8 @@ export default function App() {
   const [raw, setRaw] = useState(null) // { label, body } of the last backend response
   const [requestError, setRequestError] = useState(null)
   const [mockScenario, setMockScenario] = useState('ready_plain')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [listRefresh, setListRefresh] = useState(0)
 
   function clearSubmission() {
     setSubmission(null)
@@ -29,6 +32,12 @@ export default function App() {
     setAssignmentId(id)
   }
 
+  function selectSubmission(id) {
+    if (id === submissionId) return
+    clearSubmission()
+    setSubmissionId(id)
+  }
+
   async function handleUpload(e) {
     e.preventDefault()
     if (!file || assignmentId == null) return
@@ -40,6 +49,7 @@ export default function App() {
       const res = await api.createSubmission(assignmentId, file)
       setRaw({ label: `POST ${url} -> ${res.status}`, body: res.body })
       setSubmissionId(res.body.submission_ids[0])
+      setListRefresh((n) => n + 1)
     } catch (err) {
       setRequestError(err.message)
       setRaw({ label: `POST ${url} (failed)`, body: err.body ?? null })
@@ -82,54 +92,67 @@ export default function App() {
         {USE_MOCK && <span className="mock-badge">MOCK MODE - no backend calls</span>}
       </header>
 
-      <AssignmentSetup
-        assignmentId={assignmentId}
-        onSelect={selectAssignment}
-        onResponse={(label, body) => setRaw({ label, body })}
-      />
+      <div className={sidebarOpen ? 'layout' : 'layout sidebar-closed'}>
+        <div className="main">
+          <AssignmentSetup
+            assignmentId={assignmentId}
+            onSelect={selectAssignment}
+            onResponse={(label, body) => setRaw({ label, body })}
+          />
 
-      <form className="upload" onSubmit={handleUpload}>
-        <input
-          type="file"
-          accept=".jpg,.jpeg,.png,.webp"
-          onChange={(e) => setFile(e.target.files[0] ?? null)}
+          <form className="upload" onSubmit={handleUpload}>
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp"
+              onChange={(e) => setFile(e.target.files[0] ?? null)}
+            />
+            {USE_MOCK && (
+              <label>
+                Mock scenario:{' '}
+                <select value={mockScenario} onChange={(e) => setMockScenario(e.target.value)}>
+                  {Object.entries(SCENARIOS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <button type="submit" disabled={!file || uploading || assignmentId == null}>
+              {uploading ? 'Uploading...' : 'Upload'}
+            </button>
+            {assignmentId == null && <span className="hint">Select an assignment before uploading.</span>}
+          </form>
+
+          {requestError && <div className="banner error">Request failed: {requestError}</div>}
+
+          {!submission && !requestError && (
+            <p className="empty">
+              {submissionId != null
+                ? `Loading submission #${submissionId}...`
+                : 'Choose a photo of a handwritten program (jpg, png, or webp) and upload it, or pick a submission on the right.'}
+            </p>
+          )}
+
+          {submission && <SubmissionView submission={submission} />}
+
+          {raw && (
+            <details className="raw">
+              <summary>Raw JSON ({raw.label})</summary>
+              <pre>{JSON.stringify(raw.body, null, 2)}</pre>
+            </details>
+          )}
+        </div>
+
+        <SubmissionList
+          assignmentId={assignmentId}
+          selectedId={submissionId}
+          onSelect={selectSubmission}
+          refreshKey={listRefresh}
+          open={sidebarOpen}
+          onToggle={() => setSidebarOpen((o) => !o)}
         />
-        {USE_MOCK && (
-          <label>
-            Mock scenario:{' '}
-            <select value={mockScenario} onChange={(e) => setMockScenario(e.target.value)}>
-              {Object.entries(SCENARIOS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <button type="submit" disabled={!file || uploading || assignmentId == null}>
-          {uploading ? 'Uploading...' : 'Upload'}
-        </button>
-        {assignmentId == null && <span className="hint">Select an assignment before uploading.</span>}
-      </form>
-
-      {requestError && <div className="banner error">Request failed: {requestError}</div>}
-
-      {!submission && !requestError && (
-        <p className="empty">
-          {submissionId != null
-            ? `Uploaded. Loading submission #${submissionId}...`
-            : 'Choose a photo of a handwritten program (jpg, png, or webp) and upload it.'}
-        </p>
-      )}
-
-      {submission && <SubmissionView submission={submission} />}
-
-      {raw && (
-        <details className="raw">
-          <summary>Raw JSON ({raw.label})</summary>
-          <pre>{JSON.stringify(raw.body, null, 2)}</pre>
-        </details>
-      )}
+      </div>
     </div>
   )
 }

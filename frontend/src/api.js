@@ -1,7 +1,7 @@
 // Single switch between the mock and the real backend. See .env.development.
 import * as mock from './mockApi.js'
 
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'false'
+export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 
 // Returns { status, body } so the UI can show exactly what came back.
 async function request(method, url, body) {
@@ -50,6 +50,9 @@ const real = {
     const form = new FormData()
     form.append('files', file)
     return request('POST', `/api/assignments/${assignmentId}/submissions`, form)
+  },
+  listSubmissions(assignmentId) {
+    return request('GET', `/api/assignments/${assignmentId}/submissions`)
   },
   getSubmission(id) {
     return request('GET', `/api/submissions/${id}`)

@@ -7,7 +7,18 @@ body {
   color: #222;
 }
 
-.page { max-width: 1400px; margin: 0 auto; padding: 16px; }
+/* Wide enough that the main column keeps ~1400px next to the open sidebar. */
+.page { max-width: 1680px; margin: 0 auto; padding: 16px; }
+
+/* Main content left, submissions sidebar right. The breakpoints below are
+   container queries on .main, so they react to the space left by the sidebar. */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 12px; align-items: start; }
+.layout.sidebar-closed { grid-template-columns: minmax(0, 1fr) 36px; }
+.main { container-type: inline-size; min-width: 0; }
+
+@media (max-width: 800px) {
+  .layout, .layout.sidebar-closed { grid-template-columns: 1fr; }
+}
 
 header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 h1 { font-size: 1.4rem; margin: 0; }
@@ -36,13 +47,18 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
 .status-processing { background: #cfe2ff; }
 .status-ready { background: #d1e7dd; }
 .status-error { background: #f8d7da; }
+.status-graded { background: #e0d4f5; }
 
 /* Photo left, code right; stacks on narrow screens. */
 .review { display: grid; grid-template-columns: minmax(280px, 1fr) 2fr; gap: 12px; }
 .code-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; min-width: 0; }
 
-@media (max-width: 1000px) {
-  .review, .code-panels { grid-template-columns: 1fr; }
+/* Stack the two code panels first so the photo stays beside the code as long as possible. */
+@container (max-width: 1000px) {
+  .code-panels { grid-template-columns: 1fr; }
+}
+@container (max-width: 700px) {
+  .review { grid-template-columns: 1fr; }
 }
 
 .panel { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; min-width: 0; }
@@ -63,7 +79,7 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
 
 /* Assignment + test cases, above the upload box. Same panels as the review row. */
 .setup { display: grid; grid-template-columns: minmax(280px, 1fr) 2fr; gap: 12px; margin-top: 16px; }
-@media (max-width: 1000px) {
+@container (max-width: 1000px) {
   .setup { grid-template-columns: 1fr; }
 }
 
@@ -82,8 +98,34 @@ textarea { font-family: Consolas, Menlo, monospace; font-size: 0.9rem; resize: v
 .tests pre { margin: 0; font-family: Consolas, Menlo, monospace; white-space: pre-wrap; }
 
 .add-test { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
-@media (max-width: 700px) {
+@container (max-width: 700px) {
   .add-test { grid-template-columns: 1fr; }
+}
+
+/* Submissions sidebar. Sticky so it stays in view while scrolling the review. */
+.sidebar { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; margin-top: 16px; }
+.sidebar-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sidebar-header h2 { margin: 0; }
+.sidebar.collapsed { overflow: visible; }
+.sidebar-tab {
+  width: 36px; padding: 12px 0; writing-mode: vertical-rl;
+  background: #fff; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font: inherit;
+}
+
+.submission-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.submission-item {
+  width: 100%; display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; text-align: left;
+  background: #fafafa; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; font: inherit;
+}
+.submission-item:hover { background: #f0f0f0; }
+.submission-item.selected { background: #e7f0ff; border-color: #8fb3e8; }
+.item-top { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.item-label { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-meta { color: #777; font-size: 0.8rem; }
+
+@media (max-width: 800px) {
+  .sidebar { position: static; max-height: none; }
+  .sidebar-tab { width: 100%; writing-mode: horizontal-tb; }
 }
 
 .raw { margin-top: 16px; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 8px 12px; }

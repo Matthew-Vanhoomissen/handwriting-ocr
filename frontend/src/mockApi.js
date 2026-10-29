@@ -31,6 +31,9 @@ const FINAL = {
       static_flags: [],
     },
     error_message: null,
+    verdict: 'pass',
+    suggested_score: 10,
+    score_reasoning: 'Passed 2 of 2 tests: 10 x 2/2 = 10.',
   },
   ready_corrected: {
     status: 'ready',
@@ -46,6 +49,9 @@ const FINAL = {
       static_flags: [{ line: 1, reason: "syntax error: expected ':'" }],
     },
     error_message: null,
+    verdict: null,
+    suggested_score: 0,
+    score_reasoning: 'Passed 0 of 2 tests: 10 x 0/2 = 0.',
   },
   error: {
     status: 'error',
@@ -53,7 +59,20 @@ const FINAL = {
     corrected_code: null,
     flags: null,
     error_message: 'RateLimitError: model API returned 429 (rate limited)',
+    verdict: null,
+    suggested_score: null,
+    score_reasoning: null,
   },
+}
+
+const PENDING = {
+  transcription: null,
+  corrected_code: null,
+  flags: null,
+  error_message: null,
+  verdict: null,
+  suggested_score: null,
+  score_reasoning: null,
 }
 
 const assignments = new Map()
@@ -80,6 +99,11 @@ function insertTestCase(assignmentId, { input = '', expected_output }) {
 const seeded = insertAssignment({ title: 'Add two numbers (mock)', prompt: 'Read two ints, print their sum.', max_points: 10 })
 insertTestCase(seeded.id, { input: '2 3\n', expected_output: '5\n' })
 insertTestCase(seeded.id, { input: '-1 1\n', expected_output: '0\n' })
+
+// Seed already-finished submissions so the side panel has something to show.
+for (const [label, name] of [['sample_01', 'ready_plain'], ['sample_02', 'ready_corrected'], ['sample_03', 'error']]) {
+  submissions.set(nextSubmissionId++, { createdAt: 0, scenario: name, assignmentId: seeded.id, label })
+}
 
 export function setScenario(name) {
   scenario = name
@@ -147,20 +171,17 @@ export async function createSubmission(assignmentId, file) {
   return { status: 201, body: { submission_ids: [id] } }
 }
 
-export async function getSubmission(id) {
-  await delay(150)
-  const sub = submissions.get(Number(id))
-  if (!sub) throw fail('GET', `/api/submissions/${id}`, 404, 'Not Found')
+// Full submission object as GET /api/submissions/:id returns it.
+function buildSubmission(id, sub) {
   const elapsed = Date.now() - sub.createdAt
-  const pending = { transcription: null, corrected_code: null, flags: null, error_message: null }
   let state
-  if (elapsed < QUEUED_MS) state = { status: 'queued', ...pending }
-  else if (elapsed < QUEUED_MS + PROCESSING_MS) state = { status: 'processing', ...pending }
+  if (elapsed < QUEUED_MS) state = { status: 'queued', ...PENDING }
+  else if (elapsed < QUEUED_MS + PROCESSING_MS) state = { status: 'processing', ...PENDING }
   else state = FINAL[sub.scenario]
 
-  // Mock does not run tests, so there are no results and no suggested score.
-  const body = {
-    id: Number(id),
+  // Scores are canned per scenario; the mock does not run tests, so test_results stays empty.
+  return {
+    id,
     assignment_id: sub.assignmentId,
     student_label: sub.label,
     status: state.status,
@@ -168,15 +189,42 @@ export async function getSubmission(id) {
     corrected_code: state.corrected_code,
     flags: state.flags,
     error_message: state.error_message,
-    verdict: null,
-    suggested_score: null,
+    verdict: state.verdict,
+    suggested_score: state.suggested_score,
     final_score: null,
     notes: null,
     assignment: assignments.get(sub.assignmentId) ?? null,
     test_results: [],
-    score_reasoning: null,
+    score_reasoning: state.score_reasoning,
   }
-  return { status: 200, body }
+}
+
+export async function getSubmission(id) {
+  await delay(150)
+  const sub = submissions.get(Number(id))
+  if (!sub) throw fail('GET', `/api/submissions/${id}`, 404, 'Not Found')
+  return { status: 200, body: buildSubmission(Number(id), sub) }
+}
+
+export async function listSubmissions(assignmentId) {
+  await delay(150)
+  assignmentOr404('GET', `/api/assignments/${assignmentId}/submissions`, assignmentId)
+  const rows = [...submissions.entries()]
+    .filter(([, sub]) => sub.assignmentId === Number(assignmentId))
+    .map(([id, sub]) => {
+      const s = buildSubmission(id, sub)
+      return {
+        id: s.id,
+        assignment_id: s.assignment_id,
+        student_label: s.student_label,
+        status: s.status,
+        verdict: s.verdict,
+        suggested_score: s.suggested_score,
+        final_score: s.final_score,
+        error_message: s.error_message,
+      }
+    })
+  return { status: 200, body: rows }
 }
 
 export function imageUrl(id) {
