@@ -118,6 +118,19 @@ textarea { font-family: Consolas, Menlo, monospace; font-size: 0.9rem; resize: v
 .tests th, .tests td { border-bottom: 1px solid #ddd; padding: 6px; text-align: left; vertical-align: top; }
 .tests pre { margin: 0; font-family: Consolas, Menlo, monospace; white-space: pre-wrap; }
 
+/* Test results under the photo and code. */
+.results-panel { margin-top: 12px; }
+.results-panel h3 { font-size: 0.95rem; margin: 12px 0 6px; }
+.results pre { max-height: 10em; overflow: auto; }
+.results .num { text-align: right; white-space: nowrap; }
+.results tr.failed td { background: #fff7f7; }
+.results tfoot td { border-top: 2px solid #ccc; border-bottom: none; }
+.results .total-label { text-align: right; font-weight: bold; }
+.results .run-error { color: #8a1f1f; margin-top: 4px; font-size: 0.85rem; }
+.result { font-weight: bold; padding: 1px 8px; border-radius: 4px; }
+.result-pass { background: #d1e7dd; }
+.result-fail { background: #f8d7da; }
+
 .add-test { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
 @container (max-width: 700px) {
   .add-test { grid-template-columns: 1fr; }

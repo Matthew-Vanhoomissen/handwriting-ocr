@@ -31,9 +31,8 @@ const FINAL = {
       static_flags: [],
     },
     error_message: null,
-    verdict: 'pass',
-    suggested_score: 10,
-    score_reasoning: 'Passed 2 of 2 tests: 10 x 2/2 = 10.',
+    // Ignores stdin and always prints 5, so it passes some tests and fails others.
+    run: () => ({ actual_output: '5\n', error: null }),
   },
   ready_corrected: {
     status: 'ready',
@@ -49,9 +48,11 @@ const FINAL = {
       static_flags: [{ line: 1, reason: "syntax error: expected ':'" }],
     },
     error_message: null,
-    verdict: null,
-    suggested_score: 0,
-    score_reasoning: 'Passed 0 of 2 tests: 10 x 0/2 = 0.',
+    // The original transcription doesn't parse, so every test fails the way the sandbox reports it.
+    run: () => ({
+      actual_output: '',
+      error: '  File "/code/main.py", line 1\n    def average(nums)\n                     ^\nSyntaxError: expected \':\'',
+    }),
   },
   error: {
     status: 'error',
@@ -59,9 +60,7 @@ const FINAL = {
     corrected_code: null,
     flags: null,
     error_message: 'RateLimitError: model API returned 429 (rate limited)',
-    verdict: null,
-    suggested_score: null,
-    score_reasoning: null,
+    run: null,
   },
 }
 
@@ -70,9 +69,47 @@ const PENDING = {
   corrected_code: null,
   flags: null,
   error_message: null,
-  verdict: null,
-  suggested_score: null,
-  score_reasoning: null,
+  run: null,
+}
+
+// Same comparison as backend/sandbox.py outputs_match: unless exact, ignore
+// trailing whitespace on each line and trailing blank lines.
+function outputsMatch(actual, expected, exact) {
+  if (exact) return actual === expected
+  const norm = (s) => s.replace(/\r\n/g, '\n').split('\n').map((l) => l.trimEnd()).join('\n').replace(/\n+$/, '')
+  return norm(actual) === norm(expected)
+}
+
+// Fake a test run against the assignment's current test cases, scored like
+// backend/scoring.py. Results are computed on read, so they follow later test edits.
+function runMockTests(submissionId, assignment, run) {
+  if (!run || !assignment) return { test_results: [], verdict: null, suggested_score: null, score_reasoning: null }
+  const tests = [...testCases.values()].filter((t) => t.assignment_id === assignment.id)
+  const test_results = tests.map((t, i) => {
+    const { actual_output, error } = run(t)
+    const passed = error == null && outputsMatch(actual_output, t.expected_output, Boolean(assignment.exact_match))
+    return {
+      id: submissionId * 100 + i,
+      submission_id: submissionId,
+      test_case_id: t.id,
+      version: 'original',
+      passed: passed ? 1 : 0,
+      actual_output,
+      error,
+      input: t.input,
+      expected_output: t.expected_output,
+    }
+  })
+  const total = test_results.length
+  const passed = test_results.filter((r) => r.passed).length
+  if (total === 0) return { test_results, verdict: null, suggested_score: null, score_reasoning: null }
+  const score = Math.round((assignment.max_points * passed / total) * 100) / 100
+  return {
+    test_results,
+    verdict: passed === total ? 'pass' : null,
+    suggested_score: score,
+    score_reasoning: `Passed ${passed} of ${total} tests: ${assignment.max_points} x ${passed}/${total} = ${score}.`,
+  }
 }
 
 const assignments = new Map()
@@ -190,7 +227,8 @@ function buildSubmission(id, sub) {
   else if (elapsed < QUEUED_MS + PROCESSING_MS) state = { status: 'processing', ...PENDING }
   else state = FINAL[sub.scenario]
 
-  // Scores are canned per scenario; the mock does not run tests, so test_results stays empty.
+  const assignment = assignments.get(sub.assignmentId) ?? null
+  const graded = runMockTests(id, assignment, state.run)
   return {
     id,
     assignment_id: sub.assignmentId,
@@ -200,13 +238,13 @@ function buildSubmission(id, sub) {
     corrected_code: state.corrected_code,
     flags: state.flags,
     error_message: state.error_message,
-    verdict: state.verdict,
-    suggested_score: state.suggested_score,
+    verdict: graded.verdict,
+    suggested_score: graded.suggested_score,
     final_score: null,
     notes: null,
-    assignment: assignments.get(sub.assignmentId) ?? null,
-    test_results: [],
-    score_reasoning: state.score_reasoning,
+    assignment,
+    test_results: graded.test_results,
+    score_reasoning: graded.score_reasoning,
   }
 }
 

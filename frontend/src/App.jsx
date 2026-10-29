@@ -6,6 +6,7 @@ import AssignmentSetup from './components/AssignmentSetup.jsx'
 import AssignmentTabs from './components/AssignmentTabs.jsx'
 import SubmissionList from './components/SubmissionList.jsx'
 import ConfirmDialog from './components/ConfirmDialog.jsx'
+import TestResults from './components/TestResults.jsx'
 
 const POLL_MS = 1500
 const DONE = ['ready', 'graded', 'error']
@@ -322,6 +323,8 @@ function SubmissionView({ submission, onDelete }) {
           </div>
         </div>
       </div>
+
+      <TestResults submission={submission} />
     </section>
   )
 }

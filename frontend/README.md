@@ -28,7 +28,7 @@ Restart `npm run dev` after changing it. Vite only reads `.env` files at startup
 - ready, syntax error + corrected code
 - error
 
-Mock images are placeholders in `public/mock/`. The photo you upload is ignored, but its file type is checked like the backend does (jpg, png, webp). The mock doesn't run tests, so `test_results` is always empty.
+Mock images are placeholders in `public/mock/`. The photo you upload is ignored, but its file type is checked like the backend does (jpg, png, webp). The mock fakes test results against the assignment's current test cases: "ready, no corrected code" always prints `5` (so it passes some tests and fails others), and "syntax error" fails every test with a traceback. Scores follow the backend's formula.
 
 **Real mode**: start Flask on port 5000 first. The Vite dev proxy forwards `/api/*` to `http://localhost:5000` (see `vite.config.js`), so the browser makes same-origin requests and Flask needs no CORS setup. The frontend never talks to the Meta API and never sees `MODEL_API_KEY`.
 
@@ -40,6 +40,7 @@ Mock images are placeholders in `public/mock/`. The photo you upload is ignored,
 - `src/components/AssignmentTabs.jsx`: tab bar across the top for switching assignments; "+ New assignment" opens the create form
 - `src/components/AssignmentSetup.jsx`: the selected assignment's details, create form, and delete; plus the test case list with add and delete
 - `src/components/SubmissionList.jsx`: right-hand sidebar listing the assignment's submissions; click one to open it, "Hide" collapses it to a tab. Refreshes every 3s while any submission is queued or processing.
+- `src/components/TestResults.jsx`: per-test table under the photo and code (input, expected, actual, score, pass/fail) with the total. Each test is worth `max_points / number of tests`; the total is the backend's `suggested_score`.
 - `src/components/CodeBlock.jsx`: code with line numbers; highlights the lines in `flags.uncertain_lines` (1-indexed)
 - `src/components/ConfirmDialog.jsx`: modal confirmation (native `<dialog>`) shown before deleting an assignment or submission
 
