@@ -36,10 +36,13 @@ Mock images are placeholders in `public/mock/`. The photo you upload is ignored,
 
 - `src/api.js`: the mock/real switch and the fetch calls for assignments, test cases, and submissions
 - `src/mockApi.js`: mock responses, shaped exactly like the contract in CLAUDE.md section 12 (which mirrors `backend/app.py`)
-- `src/AssignmentSetup.jsx`: assignment picker and create form, plus the test case list with add and delete
-- `src/SubmissionList.jsx`: right-hand sidebar listing the assignment's submissions; click one to open it, "Hide" collapses it to a tab. Refreshes every 3s while any submission is queued or processing.
-- `src/App.jsx`: upload form, polling (every 1.5s, stops at `ready`, `graded`, or `error`), and the review layout
-- `src/CodeBlock.jsx`: code with line numbers; highlights the lines in `flags.uncertain_lines` (1-indexed)
+- `src/App.jsx`: upload form, polling (every 1.5s, stops at `ready`, `graded`, or `error`), the review layout, and deleting the open submission
+- `src/components/AssignmentSetup.jsx`: assignment picker, create form, and delete; plus the test case list with add and delete
+- `src/components/SubmissionList.jsx`: right-hand sidebar listing the assignment's submissions; click one to open it, "Hide" collapses it to a tab. Refreshes every 3s while any submission is queued or processing.
+- `src/components/CodeBlock.jsx`: code with line numbers; highlights the lines in `flags.uncertain_lines` (1-indexed)
+- `src/components/ConfirmDialog.jsx`: modal confirmation (native `<dialog>`) shown before deleting an assignment or submission
+
+New components go in `src/components/`.
 
 ## Debugging
 

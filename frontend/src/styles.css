@@ -41,7 +41,8 @@ h2 { font-size: 1rem; margin: 0 0 8px; }
 .banner.error { background: #fde8e8; border: 1px solid #e5a0a0; color: #8a1f1f; }
 .banner.warn { background: #fff3cd; border: 1px solid #e0c060; color: #6b5200; font-family: monospace; }
 
-.status-row { margin-bottom: 8px; }
+.status-row { margin-bottom: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; }
+.status-row .danger { margin-left: auto; }
 .status { font-weight: bold; padding: 1px 8px; border-radius: 4px; }
 .status-queued { background: #e2e3e5; }
 .status-processing { background: #cfe2ff; }
@@ -127,6 +128,14 @@ textarea { font-family: Consolas, Menlo, monospace; font-size: 0.9rem; resize: v
   .sidebar { position: static; max-height: none; }
   .sidebar-tab { width: 100%; writing-mode: horizontal-tb; }
 }
+
+/* Destructive actions and their confirmation dialog. */
+button.danger { color: #8a1f1f; border: 1px solid #e5a0a0; background: #fde8e8; border-radius: 3px; cursor: pointer; }
+button.danger:hover:not(:disabled) { background: #f8d0d0; }
+.confirm { max-width: 440px; border: 1px solid #ddd; border-radius: 6px; padding: 16px; }
+.confirm::backdrop { background: rgb(0 0 0 / 0.35); }
+.confirm-message p, .confirm-message ul { margin: 8px 0; }
+.confirm-actions { justify-content: flex-end; margin-top: 12px; }
 
 .raw { margin-top: 16px; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 8px 12px; }
 .raw summary { cursor: pointer; }

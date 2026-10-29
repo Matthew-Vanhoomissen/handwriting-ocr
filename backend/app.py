@@ -81,11 +81,38 @@ def add_test_case(assignment_id):
     return jsonify({"id": test_id}), 201
 
 
+# Deletions
+
+def _delete_upload(image_path):
+    """Remove an uploaded photo. Files outside UPLOAD_DIR are left alone.
+
+    Submissions created from the CLI point at photos in samples/, which must
+    survive deleting the submission.
+    """
+    if not image_path:
+        return
+    path = Path(image_path).resolve()
+    if path.is_relative_to(UPLOAD_DIR.resolve()):
+        path.unlink(missing_ok=True)
+
+
 @app.delete("/api/tests/<int:test_case_id>")
 def delete_test_case(test_case_id):
     db.delete_test_case(test_case_id)
     return "", 204
 
+
+@app.delete("/api/assignments/<int:assignment_id>")
+def delete_assignment(assignment_id):
+    for image_path in db.delete_assignment(assignment_id):
+        _delete_upload(image_path)
+    return "", 204
+
+
+@app.delete("/api/submissions/<int:submission_id>")
+def delete_submission(submission_id):
+    _delete_upload(db.delete_submission(submission_id))
+    return "", 204
 
 # Uploads and submissions
 

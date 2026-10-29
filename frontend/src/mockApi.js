@@ -145,6 +145,17 @@ export async function createAssignment(fields) {
   return { status: 201, body: insertAssignment(fields) }
 }
 
+// Like the backend: removes the assignment's tests and submissions too, and
+// returns 204 even if the id doesn't exist.
+export async function deleteAssignment(id) {
+  await delay(150)
+  const assignmentId = Number(id)
+  for (const [testId, t] of testCases) if (t.assignment_id === assignmentId) testCases.delete(testId)
+  for (const [subId, s] of submissions) if (s.assignmentId === assignmentId) submissions.delete(subId)
+  assignments.delete(assignmentId)
+  return { status: 204, body: null }
+}
+
 export async function addTestCase(assignmentId, fields) {
   await delay(150)
   const url = `/api/assignments/${assignmentId}/tests`
@@ -204,6 +215,12 @@ export async function getSubmission(id) {
   const sub = submissions.get(Number(id))
   if (!sub) throw fail('GET', `/api/submissions/${id}`, 404, 'Not Found')
   return { status: 200, body: buildSubmission(Number(id), sub) }
+}
+
+export async function deleteSubmission(id) {
+  await delay(150)
+  submissions.delete(Number(id))
+  return { status: 204, body: null }
 }
 
 export async function listSubmissions(assignmentId) {

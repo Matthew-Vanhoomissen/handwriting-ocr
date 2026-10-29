@@ -110,6 +110,29 @@ def get_assignment(assignment_id):
             "SELECT * FROM assignments WHERE id = ?", (assignment_id,)))
 
 
+def delete_assignment(assignment_id):
+    """Delete an assignment with its tests, submissions, and results.
+
+    Returns the image paths of the deleted submissions so the caller can
+    remove the files.
+    """
+    with connect() as conn:
+        images = [r["image_path"] for r in _rows(conn.execute(
+            "SELECT image_path FROM submissions WHERE assignment_id = ?",
+            (assignment_id,)))]
+        # Children first: foreign_keys is on, so parents can't go first.
+        conn.execute(
+            "DELETE FROM test_results WHERE submission_id IN"
+            " (SELECT id FROM submissions WHERE assignment_id = ?)",
+            (assignment_id,))
+        conn.execute("DELETE FROM submissions WHERE assignment_id = ?",
+                     (assignment_id,))
+        conn.execute("DELETE FROM test_cases WHERE assignment_id = ?",
+                     (assignment_id,))
+        conn.execute("DELETE FROM assignments WHERE id = ?", (assignment_id,))
+    return images
+
+
 def add_test_case(assignment_id, input_text, expected_output):
     with connect() as conn:
         cur = conn.execute(
@@ -167,6 +190,18 @@ def update_submission(submission_id, **fields):
     with connect() as conn:
         conn.execute(f"UPDATE submissions SET {columns} WHERE id = ?",
                      (*fields.values(), submission_id))
+
+
+def delete_submission(submission_id):
+    """Delete a submission and its results. Returns its image path."""
+    with connect() as conn:
+        sub = _row(conn.execute(
+            "SELECT image_path FROM submissions WHERE id = ?",
+            (submission_id,)))
+        conn.execute("DELETE FROM test_results WHERE submission_id = ?",
+                     (submission_id,))
+        conn.execute("DELETE FROM submissions WHERE id = ?", (submission_id,))
+    return sub["image_path"] if sub else None
 
 
 def claim_next_queued():

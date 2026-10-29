@@ -1,6 +1,7 @@
 """End-to-end API tests with a fake transcription (no model calls)."""
 
 import io
+from pathlib import Path
 
 import pytest
 
@@ -102,3 +103,61 @@ def test_partial_credit(client):
     sub = client.get(f"/api/submissions/{sub_id}").get_json()
     assert sub["suggested_score"] == pytest.approx(6.67)
     assert sub["score_reasoning"] == "Passed 2 of 3 tests: 10 x 2/3 = 6.67."
+
+
+def make_processed_assignment(client):
+    """An assignment with one test and two processed, uploaded submissions."""
+    a = client.post("/api/assignments", json={
+        "title": "Reverse", "max_points": 10}).get_json()
+    client.post(f"/api/assignments/{a['id']}/tests",
+                json={"input": "abc\n", "expected_output": "cba"})
+    ids = upload(client, a["id"], ["good.jpg", "misread.jpg"],
+                 [b"good.jpg", b"misread.jpg"]).get_json()["submission_ids"]
+    while worker.process_next():
+        pass
+    return a["id"], ids
+
+
+def test_delete_submission_removes_results_and_photo(client):
+    assignment_id, (sub_id, other_id) = make_processed_assignment(client)
+    photo = db.get_submission(sub_id)["image_path"]
+    assert db.list_test_results(sub_id)
+
+    assert client.delete(f"/api/submissions/{sub_id}").status_code == 204
+    assert client.get(f"/api/submissions/{sub_id}").status_code == 404
+    assert db.list_test_results(sub_id) == []
+    assert not Path(photo).exists()
+    # The other submission is untouched.
+    assert Path(db.get_submission(other_id)["image_path"]).exists()
+    assert db.list_test_results(other_id)
+
+
+def test_delete_assignment_removes_everything(client):
+    assignment_id, sub_ids = make_processed_assignment(client)
+    photos = [db.get_submission(s)["image_path"] for s in sub_ids]
+
+    r = client.delete(f"/api/assignments/{assignment_id}")
+    assert r.status_code == 204
+    assert client.get(f"/api/assignments/{assignment_id}").status_code == 404
+    assert db.list_test_cases(assignment_id) == []
+    for s in sub_ids:
+        assert db.get_submission(s) is None
+        assert db.list_test_results(s) == []
+    assert not any(Path(p).exists() for p in photos)
+
+
+def test_delete_assignment_without_tests_or_submissions(client):
+    a = client.post("/api/assignments", json={
+        "title": "Empty", "max_points": 1}).get_json()
+    assert client.delete(f"/api/assignments/{a['id']}").status_code == 204
+
+
+def test_delete_keeps_photos_outside_uploads(client, tmp_path):
+    # CLI submissions point at samples/; deleting them must not touch those.
+    sample = tmp_path / "sample.jpg"
+    sample.write_bytes(b"good.jpg")
+    a = client.post("/api/assignments", json={
+        "title": "X", "max_points": 1}).get_json()
+    sub_id = db.create_submission(a["id"], "cli", str(sample))
+    client.delete(f"/api/submissions/{sub_id}")
+    assert sample.exists()

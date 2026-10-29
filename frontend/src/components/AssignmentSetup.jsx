@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
-import { api } from './api.js'
+import { api } from '../api.js'
+import ConfirmDialog from './ConfirmDialog.jsx'
 
-// Pick or create an assignment, and manage its test cases.
+// Pick, create, or delete an assignment, and manage its test cases.
 // `onResponse(label, body)` feeds the Raw JSON panel in App.
 export default function AssignmentSetup({ assignmentId, onSelect, onResponse }) {
   const [assignments, setAssignments] = useState(null) // null while loading
   const [detail, setDetail] = useState(null) // assignment with test_cases
   const [showCreate, setShowCreate] = useState(false)
   const [error, setError] = useState(null)
+  const [pendingDelete, setPendingDelete] = useState(null) // { id, title, tests, submissions }
+  const [deleting, setDeleting] = useState(false)
 
   async function call(label, fn) {
     setError(null)
@@ -67,6 +70,30 @@ export default function AssignmentSetup({ assignmentId, onSelect, onResponse }) 
     if (res) await loadDetail(assignmentId)
   }
 
+  // Count the submissions first so the confirmation says exactly what will go.
+  async function askDeleteAssignment() {
+    let submissions = null
+    try {
+      submissions = (await api.listSubmissions(detail.id)).body.length
+    } catch {
+      // Count is informational; still allow the delete.
+    }
+    setPendingDelete({ id: detail.id, title: detail.title, tests: detail.test_cases.length, submissions })
+  }
+
+  async function confirmDeleteAssignment() {
+    const { id } = pendingDelete
+    setDeleting(true)
+    const res = await call(`DELETE /api/assignments/${id}`, () => api.deleteAssignment(id))
+    setDeleting(false)
+    setPendingDelete(null)
+    if (!res) return
+    const remaining = assignments.filter((a) => a.id !== id)
+    setAssignments(remaining)
+    if (remaining.length === 0) setShowCreate(true)
+    onSelect(remaining.length ? remaining[remaining.length - 1].id : null)
+  }
+
   return (
     <div className="setup">
       <div className="panel">
@@ -94,8 +121,41 @@ export default function AssignmentSetup({ assignmentId, onSelect, onResponse }) 
                 New assignment
               </button>
             )}
+            {detail && !showCreate && (
+              <button type="button" className="danger" onClick={askDeleteAssignment}>
+                Delete assignment
+              </button>
+            )}
           </div>
         )}
+
+        <ConfirmDialog
+          open={pendingDelete != null}
+          title="Delete assignment?"
+          busy={deleting}
+          message={
+            pendingDelete && (
+              <>
+                <p>
+                  This permanently deletes <strong>{pendingDelete.title}</strong> along with:
+                </p>
+                <ul>
+                  <li>
+                    {pendingDelete.tests} test case{pendingDelete.tests === 1 ? '' : 's'}
+                  </li>
+                  <li>
+                    {pendingDelete.submissions ?? 'all'} submission{pendingDelete.submissions === 1 ? '' : 's'}, with
+                    their uploaded photos, test results, and scores
+                  </li>
+                </ul>
+                <p>This cannot be undone.</p>
+              </>
+            )
+          }
+          confirmLabel="Delete assignment"
+          onConfirm={confirmDeleteAssignment}
+          onCancel={() => setPendingDelete(null)}
+        />
 
         {detail && !showCreate && (
           <div className="assignment-info">

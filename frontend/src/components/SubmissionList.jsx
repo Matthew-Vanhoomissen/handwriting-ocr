@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from './api.js'
+import { api } from '../api.js'
 
 const REFRESH_MS = 3000
 const PENDING = ['queued', 'processing']

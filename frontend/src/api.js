@@ -40,6 +40,9 @@ const real = {
   createAssignment(fields) {
     return request('POST', '/api/assignments', fields)
   },
+  deleteAssignment(id) {
+    return request('DELETE', `/api/assignments/${id}`)
+  },
   addTestCase(assignmentId, fields) {
     return request('POST', `/api/assignments/${assignmentId}/tests`, fields)
   },
@@ -56,6 +59,9 @@ const real = {
   },
   getSubmission(id) {
     return request('GET', `/api/submissions/${id}`)
+  },
+  deleteSubmission(id) {
+    return request('DELETE', `/api/submissions/${id}`)
   },
   imageUrl(id) {
     return `/api/submissions/${id}/image`

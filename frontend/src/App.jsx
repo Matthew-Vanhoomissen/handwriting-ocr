@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api, USE_MOCK } from './api.js'
 import { SCENARIOS, setScenario } from './mockApi.js'
-import CodeBlock from './CodeBlock.jsx'
-import AssignmentSetup from './AssignmentSetup.jsx'
-import SubmissionList from './SubmissionList.jsx'
+import CodeBlock from './components/CodeBlock.jsx'
+import AssignmentSetup from './components/AssignmentSetup.jsx'
+import SubmissionList from './components/SubmissionList.jsx'
+import ConfirmDialog from './components/ConfirmDialog.jsx'
 
 const POLL_MS = 1500
 const DONE = ['ready', 'graded', 'error']
@@ -19,6 +20,8 @@ export default function App() {
   const [mockScenario, setMockScenario] = useState('ready_plain')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [listRefresh, setListRefresh] = useState(0)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   function clearSubmission() {
     setSubmission(null)
@@ -55,6 +58,24 @@ export default function App() {
       setRaw({ label: `POST ${url} (failed)`, body: err.body ?? null })
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function deleteSubmission() {
+    const id = submission.id
+    const url = `/api/submissions/${id}`
+    setDeleting(true)
+    try {
+      const res = await api.deleteSubmission(id)
+      setRaw({ label: `DELETE ${url} -> ${res.status}`, body: res.body })
+      clearSubmission()
+      setListRefresh((n) => n + 1)
+    } catch (err) {
+      setRequestError(err.message)
+      setRaw({ label: `DELETE ${url} (failed)`, body: err.body ?? null })
+    } finally {
+      setDeleting(false)
+      setConfirmingDelete(false)
     }
   }
 
@@ -134,7 +155,31 @@ export default function App() {
             </p>
           )}
 
-          {submission && <SubmissionView submission={submission} />}
+          {submission && <SubmissionView submission={submission} onDelete={() => setConfirmingDelete(true)} />}
+
+          <ConfirmDialog
+            open={confirmingDelete && submission != null}
+            title="Delete submission?"
+            busy={deleting}
+            message={
+              submission && (
+                <>
+                  <p>
+                    This permanently deletes submission <strong>#{submission.id}</strong>
+                    {submission.student_label && <> ({submission.student_label})</>}, including its uploaded
+                    photo, transcription, test results, and scores.
+                  </p>
+                  {!DONE.includes(submission.status) && (
+                    <p>It is still {submission.status}. Deleting it now discards any work in progress.</p>
+                  )}
+                  <p>This cannot be undone.</p>
+                </>
+              )
+            }
+            confirmLabel="Delete submission"
+            onConfirm={deleteSubmission}
+            onCancel={() => setConfirmingDelete(false)}
+          />
 
           {raw && (
             <details className="raw">
@@ -157,7 +202,7 @@ export default function App() {
   )
 }
 
-function SubmissionView({ submission }) {
+function SubmissionView({ submission, onDelete }) {
   const { id, student_label, status, transcription, flags, corrected_code, error_message } = submission
   const pending = !DONE.includes(status)
   const uncertainLines = (flags?.uncertain_lines ?? []).map((u) => u.line)
@@ -169,6 +214,9 @@ function SubmissionView({ submission }) {
         Submission #{id}
         {student_label && ` (${student_label})`}: <span className={`status status-${status}`}>{status}</span>
         {pending && <span className="hint"> checking every {POLL_MS / 1000}s...</span>}
+        <button type="button" className="danger" onClick={onDelete}>
+          Delete submission
+        </button>
       </div>
       {status === 'error' && (
         <div className="banner error">{error_message || 'Unknown error (no message from backend)'}</div>
