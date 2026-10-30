@@ -4,26 +4,84 @@ An assignment holds questions; each question holds its own test cases and
 submissions. Submission routes are keyed by submission id alone.
 
 Run with: python -m backend.app  (starts the API and the worker thread)
+
+Every /api/ request from another machine (e.g. a phone) must send
+X-API-Token matching API_TOKEN. Requests from this machine are exempt.
 """
 
+import hmac
+import ipaddress
+import os
+import sys
 import uuid
 from pathlib import Path
 
+from dotenv import load_dotenv
 from flask import Flask, abort, jsonify, request, send_file
 
 from backend import db, worker
 from backend.pipeline import rerun_submission, rescore_question
 from backend.scoring import suggest_score
 
+load_dotenv()
+
 UPLOAD_DIR = db.DATA_DIR / "uploads"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+# Per request, so a batch of phone photos (5-15 MB each) fits. Photos are
+# downscaled to 2048 px before the model sees them, far under Meta's 50 MB
+# per-image limit, so this only guards the server's disk and memory.
+MAX_UPLOAD_MB = 200
+MIN_TOKEN_LENGTH = 16
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
+app.config["API_TOKEN"] = os.environ.get("API_TOKEN", "")
 
 
 def _bad_request(message):
     return jsonify({"error": message}), 400
+
+
+def _is_loopback(host):
+    """True for 127.x.x.x, ::1, ::ffff:127.x.x.x, and 'localhost'."""
+    if host == "localhost":
+        return True
+    try:
+        addr = ipaddress.ip_address(host)
+    except (TypeError, ValueError):
+        return False
+    if getattr(addr, "ipv4_mapped", None):
+        addr = addr.ipv4_mapped
+    return addr.is_loopback
+
+
+@app.before_request
+def check_token():
+    """Reject /api/ requests from other machines without the right token.
+
+    Uses the socket's address only. Forwarded headers are ignored because
+    any client can set them. An unset token matches nothing (fails closed).
+    """
+    if not request.path.startswith("/api/"):
+        return None
+    if _is_loopback(request.remote_addr):
+        return None
+    expected = app.config["API_TOKEN"].encode()
+    sent = request.headers.get("X-API-Token", "").encode()
+    if expected and hmac.compare_digest(sent, expected):
+        return None
+    return jsonify({"error": "missing or invalid X-API-Token"}), 401
+
+
+@app.errorhandler(413)
+def too_large(_):
+    return jsonify({"error": f"upload over {MAX_UPLOAD_MB} MB"}), 413
+
+
+@app.get("/api/ping")
+def ping():
+    """Lets a client tell a bad token (401) from an unreachable server."""
+    return jsonify({"ok": True, "server": "grader"})
 
 
 def _assignment_or_404(assignment_id):
@@ -283,11 +341,28 @@ def delete_submission(submission_id):
     return "", 204
 
 
+def config_error(host, token):
+    """Why the server must not start with these settings, or None."""
+    if _is_loopback(host):
+        return None
+    if len(token) < MIN_TOKEN_LENGTH:
+        return (f"API_HOST={host} exposes the API to the network, so set"
+                f" API_TOKEN to a random string of at least"
+                f" {MIN_TOKEN_LENGTH} characters, e.g.: python -c"
+                " \"import secrets; print(secrets.token_urlsafe(24))\"")
+    return None
+
+
 def main():
+    host = os.environ.get("API_HOST", "127.0.0.1")
+    port = int(os.environ.get("API_PORT", "5000"))
+    error = config_error(host, app.config["API_TOKEN"])
+    if error:
+        sys.exit(error)
     db.init_db()
     worker.start()
     # The reloader would start a second worker thread, so keep it off.
-    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    app.run(host=host, port=port, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":

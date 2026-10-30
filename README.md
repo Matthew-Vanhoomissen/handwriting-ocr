@@ -60,6 +60,7 @@ and submissions (one photo per student per question). SQLite, five tables:
 | Method | Route | Body |
 |---|---|---|
 | POST | `/api/assignments` | `{title, language?}` |
+| GET | `/api/ping` | |
 | GET | `/api/assignments`, `/api/assignments/<id>` | |
 | DELETE | `/api/assignments/<id>` | |
 | POST | `/api/assignments/<id>/questions` | `{max_points, title?, prompt?, exact_match?, position?}` |
@@ -80,6 +81,47 @@ including uploaded photos. Changing a question's `max_points` or
 `exact_match` re-scores its submissions from the stored outputs (no code is
 re-run); final scores already given are kept. CSV export is not implemented
 yet.
+
+## Phone access
+
+By default the API listens on `127.0.0.1:5000` only, so nothing on the
+network can reach it. To let a phone on the same Wi-Fi upload photos:
+
+```
+python -c "import secrets; print(secrets.token_urlsafe(24))"   # make a token
+```
+
+Put it in `.env` and switch to network mode:
+
+```
+API_TOKEN=<the token>
+API_HOST=0.0.0.0
+API_PORT=5000        # optional
+```
+
+- Every `/api/` request from another machine must send the header
+  `X-API-Token: <token>`, or it gets a 401. Requests from this machine
+  (loopback) are exempt, so the desktop frontend needs no token.
+- The server refuses to start with `API_HOST` set to a non-loopback address
+  unless `API_TOKEN` is at least 16 characters.
+- `GET /api/ping` returns `{"ok": true, "server": "grader"}`. A 401 means a
+  bad token; a timeout means the phone can't reach the server.
+- Find the laptop's address with `ipconfig` (IPv4 Address) and use
+  `http://<that address>:5000` on the phone.
+- Windows Firewall blocks incoming connections by default. Allow Python on
+  **Private** networks only when prompted, never Public.
+
+Warnings:
+
+- Traffic is plain HTTP, so the token and photos are readable by anyone on
+  the same network. Use a trusted network (a home network or phone hotspot),
+  not campus or conference Wi-Fi.
+- This is Flask's development server. It's fine for a demo, not for hosting.
+- Don't expose the Vite dev server (`npm run dev -- --host`). Its proxy
+  forwards requests from `localhost`, so they would skip the token check.
+- Uploads are limited to 200 MB per request (413 with a JSON error). HEIC
+  is rejected, so iPhone photos must arrive as JPEG.
+- Set `API_HOST` back to `127.0.0.1` (or remove it) when you're done.
 
 ## Sandbox
 
