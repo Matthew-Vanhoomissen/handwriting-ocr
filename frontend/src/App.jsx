@@ -28,6 +28,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false)
   const [submissionId, setSubmissionId] = useState(null)
   const [submission, setSubmission] = useState(null)
+  const [submissionVersion, setSubmissionVersion] = useState(0) // bump to re-fetch the open submission
   const [raw, setRaw] = useState(null) // { label, body } of the last backend response
   const [requestError, setRequestError] = useState(null)
   const [mockScenario, setMockScenario] = useState('ready_plain')
@@ -146,6 +147,14 @@ export default function App() {
     reloadDetail()
   }
 
+  // Editing points or match mode re-scores the question's submissions, so
+  // refresh the sidebar scores and the open review along with the detail.
+  function handleQuestionEdited() {
+    reloadDetail()
+    setListRefresh((n) => n + 1)
+    setSubmissionVersion((v) => v + 1)
+  }
+
   const question = detail?.questions.find((q) => q.id === questionId) ?? null
   // Uploads go to the highlighted question; not while a create form is open.
   const uploadTarget = !creatingAssignment && !creatingQuestion ? question : null
@@ -220,7 +229,7 @@ export default function App() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [submissionId])
+  }, [submissionId, submissionVersion])
 
   return (
     <div className="page">
@@ -264,6 +273,7 @@ export default function App() {
               onCreated={handleQuestionCreated}
               onDeleted={handleQuestionDeleted}
               onChanged={reloadDetail}
+              onEdited={handleQuestionEdited}
               onResponse={(label, body) => setRaw({ label, body })}
             />
           </div>

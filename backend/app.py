@@ -12,7 +12,7 @@ from pathlib import Path
 from flask import Flask, abort, jsonify, request, send_file
 
 from backend import db, worker
-from backend.pipeline import rerun_submission
+from backend.pipeline import rerun_submission, rescore_question
 from backend.scoring import suggest_score
 
 UPLOAD_DIR = db.DATA_DIR / "uploads"
@@ -125,6 +125,39 @@ def create_question(assignment_id):
 @app.get("/api/questions/<int:question_id>")
 def get_question(question_id):
     return jsonify(_question_with_tests(_question_or_404(question_id)))
+
+
+@app.patch("/api/questions/<int:question_id>")
+def update_question(question_id):
+    """Edit any of title, prompt, max_points, exact_match.
+
+    Other keys (id, position, test_cases, ...) are ignored, so the frontend
+    can send back the whole question object.
+    """
+    question = _question_or_404(question_id)
+    body = request.get_json(silent=True) or {}
+    fields = {}
+    for name in ("title", "prompt"):
+        if name in body:
+            if not isinstance(body[name], str):
+                return _bad_request(f"{name} must be a string")
+            fields[name] = body[name]
+    if "max_points" in body:
+        try:
+            fields["max_points"] = float(body["max_points"])
+        except (TypeError, ValueError):
+            return _bad_request("max_points must be a number")
+    if "exact_match" in body:
+        fields["exact_match"] = int(bool(body["exact_match"]))
+    if not fields:
+        return _bad_request(
+            "nothing to update (title, prompt, max_points, exact_match)")
+
+    db.update_question(question_id, **fields)
+    if any(fields.get(k, question[k]) != question[k]
+           for k in ("max_points", "exact_match")):
+        rescore_question(question_id)
+    return jsonify(_question_with_tests(db.get_question(question_id)))
 
 
 @app.delete("/api/questions/<int:question_id>")
@@ -254,7 +287,7 @@ def main():
     db.init_db()
     worker.start()
     # The reloader would start a second worker thread, so keep it off.
-    app.run(port=5000, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":

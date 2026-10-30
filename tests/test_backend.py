@@ -184,6 +184,39 @@ def test_partial_credit(client):
     assert sub["score_reasoning"] == "Passed 2 of 3 tests: 10 x 2/3 = 6.67."
 
 
+def test_update_question_rescores(client):
+    q = make_question(client, make_assignment(client)["id"], 10,
+                      tests=[("1\n", "1  ")], title="Old")
+    sub_id = db.create_submission(q["id"], "s1", "unused")
+    pipeline.rerun_submission(sub_id, "print(input())")
+    db.update_submission(sub_id, final_score=7)
+    assert db.get_submission(sub_id)["suggested_score"] == 10
+
+    # Whole object sent back: extra keys are ignored.
+    r = client.patch(f"/api/questions/{q['id']}",
+                     json={**q, "title": "New", "max_points": 4})
+    assert r.status_code == 200
+    assert r.get_json()["title"] == "New"
+    assert r.get_json()["position"] == 1
+    sub = client.get(f"/api/submissions/{sub_id}").get_json()
+    assert sub["suggested_score"] == 4
+    assert sub["final_score"] == 7
+
+    # Exact match fails on the trailing spaces, without re-running code.
+    client.patch(f"/api/questions/{q['id']}", json={"exact_match": True})
+    sub = client.get(f"/api/submissions/{sub_id}").get_json()
+    assert sub["suggested_score"] == 0
+    assert sub["verdict"] is None
+    assert not sub["test_results"][0]["passed"]
+
+    assert client.patch(f"/api/questions/{q['id']}",
+                        json={"position": 3}).status_code == 400
+    assert client.patch(f"/api/questions/{q['id']}",
+                        json={"max_points": "ten"}).status_code == 400
+    assert client.patch("/api/questions/999",
+                        json={"title": "x"}).status_code == 404
+
+
 def make_processed_question(client, assignment_id):
     """A question with tests and two processed, uploaded submissions."""
     q = make_question(client, assignment_id, tests=REVERSE_TESTS)

@@ -218,6 +218,35 @@ export async function createQuestion(assignmentId, fields) {
   return { status: 201, body: questionWithTests(insertQuestion(Number(assignmentId), fields)) }
 }
 
+// Like the backend's PATCH: only title, prompt, max_points, exact_match are
+// read; other keys are ignored. Mock test results are computed on read, so
+// submissions re-score on their own, which matches the backend's rescore.
+export async function updateQuestion(id, fields) {
+  await delay(150)
+  const url = `/api/questions/${id}`
+  const q = or404(questions, 'PATCH', url, id)
+  const changes = {}
+  for (const name of ['title', 'prompt']) {
+    if (name in fields) {
+      if (typeof fields[name] !== 'string') throw fail('PATCH', url, 400, `${name} must be a string`)
+      changes[name] = fields[name]
+    }
+  }
+  if ('max_points' in fields) {
+    const n = Number(fields.max_points)
+    if (fields.max_points == null || fields.max_points === '' || Number.isNaN(n)) {
+      throw fail('PATCH', url, 400, 'max_points must be a number')
+    }
+    changes.max_points = n
+  }
+  if ('exact_match' in fields) changes.exact_match = fields.exact_match ? 1 : 0
+  if (Object.keys(changes).length === 0) {
+    throw fail('PATCH', url, 400, 'nothing to update (title, prompt, max_points, exact_match)')
+  }
+  Object.assign(q, changes)
+  return { status: 200, body: questionWithTests(q) }
+}
+
 // Removes the question's tests and submissions, and moves later questions up
 // one position so numbering stays 1..n.
 export async function deleteQuestion(id) {

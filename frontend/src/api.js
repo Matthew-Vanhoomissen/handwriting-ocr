@@ -49,6 +49,10 @@ const real = {
   createQuestion(assignmentId, fields) {
     return request('POST', `/api/assignments/${assignmentId}/questions`, fields)
   },
+  // Any of title, prompt, max_points, exact_match. Returns the question with test_cases.
+  updateQuestion(id, fields) {
+    return request('PATCH', `/api/questions/${id}`, fields)
+  },
   deleteQuestion(id) {
     return request('DELETE', `/api/questions/${id}`)
   },

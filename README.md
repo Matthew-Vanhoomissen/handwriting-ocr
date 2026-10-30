@@ -64,6 +64,7 @@ and submissions (one photo per student per question). SQLite, five tables:
 | DELETE | `/api/assignments/<id>` | |
 | POST | `/api/assignments/<id>/questions` | `{max_points, title?, prompt?, exact_match?, position?}` |
 | GET, DELETE | `/api/questions/<id>` | |
+| PATCH | `/api/questions/<id>` | any of `{title, prompt, max_points, exact_match}` |
 | POST | `/api/questions/<id>/tests` | `{input, expected_output}` |
 | DELETE | `/api/tests/<id>` | |
 | POST | `/api/questions/<id>/submissions` | multipart `files`, optional `labels` |
@@ -75,7 +76,10 @@ and submissions (one photo per student per question). SQLite, five tables:
 | POST | `/api/submissions/<id>/grade` | `{final_score, notes?}` |
 
 Deleting an assignment or question also deletes everything under it,
-including uploaded photos. CSV export is not implemented yet.
+including uploaded photos. Changing a question's `max_points` or
+`exact_match` re-scores its submissions from the stored outputs (no code is
+re-run); final scores already given are kept. CSV export is not implemented
+yet.
 
 ## Sandbox
 

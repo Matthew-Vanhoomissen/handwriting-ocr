@@ -7,6 +7,8 @@ import ConfirmDialog from './ConfirmDialog.jsx'
 // Right setup panel: the selected question's details and test cases, or the
 // add-question form. `detail` is GET /api/assignments/:id (questions include
 // their test_cases); after any change, `onChanged()` re-fetches it.
+// `onEdited()` runs after a PATCH, since changing points or match mode
+// re-scores the question's submissions.
 export default function QuestionPanel({
   detail,
   questionId,
@@ -16,21 +18,33 @@ export default function QuestionPanel({
   onCreated,
   onDeleted,
   onChanged,
+  onEdited,
   onResponse,
 }) {
   const [error, setError] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null) // { id, label, tests, submissions }
   const [deleting, setDeleting] = useState(false)
+  const [editingId, setEditingId] = useState(null) // question whose edit form is open
   const call = (label, fn) => callApi(label, fn, { onResponse, setError })
 
   const question = detail?.questions.find((q) => q.id === questionId) ?? null
   // An assignment with no questions goes straight to the form.
   const showForm = detail != null && (creating || detail.questions.length === 0)
+  // Tied to the question id, so selecting another question closes the form.
+  const editing = question != null && !showForm && editingId === question.id
 
   async function handleCreate(fields) {
     const res = await call(`POST /api/assignments/${detail.id}/questions`, () => api.createQuestion(detail.id, fields))
     if (!res) return false
     onCreated(res.body)
+    return true
+  }
+
+  async function handleEdit(fields) {
+    const res = await call(`PATCH /api/questions/${question.id}`, () => api.updateQuestion(question.id, fields))
+    if (!res) return false
+    setEditingId(null)
+    await onEdited()
     return true
   }
 
@@ -72,8 +86,10 @@ export default function QuestionPanel({
     body = (
       <>
         {detail.questions.length === 0 && <p className="hint">This assignment has no questions yet. Add the first one.</p>}
-        <CreateQuestionForm
-          nextPosition={detail.questions.length + 1}
+        <QuestionForm
+          titlePlaceholder={`Question ${detail.questions.length + 1}`}
+          submitLabel={`Add question ${detail.questions.length + 1}`}
+          savingLabel="Adding..."
           onSubmit={handleCreate}
           onCancel={detail.questions.length > 0 ? onCancelCreate : null}
         />
@@ -83,6 +99,21 @@ export default function QuestionPanel({
   else
     body = (
       <>
+        {editing && (
+          <div className="edit-question">
+            <h3>Edit question</h3>
+            <QuestionForm
+              key={question.id}
+              initial={question}
+              titlePlaceholder={`Question ${question.position}`}
+              submitLabel="Save changes"
+              savingLabel="Saving..."
+              note="Changing max points or output match re-scores this question's submissions from their saved outputs. Final scores already given are kept."
+              onSubmit={handleEdit}
+              onCancel={() => setEditingId(null)}
+            />
+          </div>
+        )}
         <div className="assignment-info">
           <div>
             Max points: <strong>{fmtPoints(question.max_points)}</strong> | Output match:{' '}
@@ -131,9 +162,14 @@ export default function QuestionPanel({
       <div className="panel-header">
         <h2>{showForm ? 'New question' : question ? questionLabel(question) : 'Question'}</h2>
         {question && !showForm && !creatingAssignment && (
-          <button type="button" className="danger" onClick={askDelete}>
-            Delete question
-          </button>
+          <div className="row">
+            <button type="button" aria-expanded={editing} onClick={() => setEditingId(editing ? null : question.id)}>
+              {editing ? 'Close edit' : 'Edit question'}
+            </button>
+            <button type="button" className="danger" onClick={askDelete}>
+              Delete question
+            </button>
+          </div>
         )}
       </div>
       {body}
@@ -171,17 +207,27 @@ export default function QuestionPanel({
   )
 }
 
-function CreateQuestionForm({ nextPosition, onSubmit, onCancel }) {
-  const [title, setTitle] = useState('')
-  const [maxPoints, setMaxPoints] = useState('10')
-  const [prompt, setPrompt] = useState('')
-  const [exactMatch, setExactMatch] = useState(false)
+// Used both to add a question and, with `initial`, to edit one. Edits send
+// only the fields that changed, and Save stays disabled until something does.
+function QuestionForm({ initial, titlePlaceholder, submitLabel, savingLabel, note, onSubmit, onCancel }) {
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [maxPoints, setMaxPoints] = useState(initial ? String(initial.max_points) : '10')
+  const [prompt, setPrompt] = useState(initial?.prompt ?? '')
+  const [exactMatch, setExactMatch] = useState(Boolean(initial?.exact_match))
   const [saving, setSaving] = useState(false)
+
+  const fields = { title: title.trim(), max_points: Number(maxPoints), prompt, exact_match: exactMatch }
+  const changed = initial
+    ? Object.fromEntries(
+        Object.entries(fields).filter(([k, v]) => (k === 'exact_match' ? v !== Boolean(initial[k]) : v !== initial[k])),
+      )
+    : fields
+  const nothingChanged = initial != null && Object.keys(changed).length === 0
 
   async function handleSubmit(e) {
     e.preventDefault()
     setSaving(true)
-    await onSubmit({ title: title.trim(), max_points: Number(maxPoints), prompt, exact_match: exactMatch })
+    await onSubmit(changed)
     setSaving(false)
   }
 
@@ -189,7 +235,7 @@ function CreateQuestionForm({ nextPosition, onSubmit, onCancel }) {
     <form className="stack" onSubmit={handleSubmit}>
       <label>
         Title (optional)
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`Question ${nextPosition}`} />
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={titlePlaceholder} />
       </label>
       <label>
         Max points
@@ -203,9 +249,10 @@ function CreateQuestionForm({ nextPosition, onSubmit, onCancel }) {
         <input type="checkbox" checked={exactMatch} onChange={(e) => setExactMatch(e.target.checked)} />
         Exact output match (off: trailing whitespace and blank lines are ignored)
       </label>
+      {note && <p className="hint">{note}</p>}
       <div className="row">
-        <button type="submit" disabled={saving || maxPoints === ''}>
-          {saving ? 'Adding...' : `Add question ${nextPosition}`}
+        <button type="submit" disabled={saving || maxPoints === '' || nothingChanged}>
+          {saving ? savingLabel : submitLabel}
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel}>

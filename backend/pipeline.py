@@ -33,17 +33,47 @@ def run_tests(code, test_cases, exact_match=False):
     return results
 
 
-def _grade(submission_id, question, code):
-    """Run tests on code, store results, and set the suggested score."""
-    tests = db.list_test_cases(question["id"])
-    results = run_tests(code, tests, bool(question["exact_match"]))
-    db.replace_test_results(submission_id, "original", results)
-
+def _score(question, results):
+    """Suggested score and verdict from one version's test results."""
     passed = sum(r["passed"] for r in results)
     score, _ = suggest_score(question["max_points"], passed, len(results))
     # Until failure investigation exists, failed submissions get no verdict.
     verdict = "pass" if results and passed == len(results) else None
     return score, verdict
+
+
+def _grade(submission_id, question, code):
+    """Run tests on code, store results, and set the suggested score."""
+    tests = db.list_test_cases(question["id"])
+    results = run_tests(code, tests, bool(question["exact_match"]))
+    db.replace_test_results(submission_id, "original", results)
+    return _score(question, results)
+
+
+def rescore_question(question_id):
+    """Update stored results and scores after a question's points or
+    exact_match setting changes.
+
+    No code runs: pass/fail is re-checked against the saved actual_output
+    and error. Final scores the professor already set are left alone.
+    """
+    question = db.get_question(question_id)
+    exact = bool(question["exact_match"])
+    for sub in db.list_submissions(question_id):
+        results = db.list_test_results(sub["id"])
+        if not results:
+            continue
+        for r in results:
+            r["passed"] = r["error"] is None and outputs_match(
+                r["actual_output"], r["expected_output"], exact=exact)
+        for version in {r["version"] for r in results}:
+            db.replace_test_results(
+                sub["id"], version,
+                [r for r in results if r["version"] == version])
+        score, verdict = _score(
+            question, [r for r in results if r["version"] == "original"])
+        db.update_submission(sub["id"], suggested_score=score,
+                             verdict=verdict)
 
 
 def process_submission(submission_id):
